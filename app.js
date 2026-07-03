@@ -89,7 +89,10 @@ const confusingPairs = [
 const defaultSettings = {
   dailyGoal: 20,
   learnMode: "written",
-  hardOnly: false
+  hardOnly: false,
+  answerSide: "term",
+  sessionSize: 20,
+  sessionIds: []
 };
 
 const state = {
@@ -107,7 +110,8 @@ const state = {
   learn: {
     currentCard: null,
     options: [],
-    answered: false
+    answered: false,
+    lastAnsweredCard: null
   }
 };
 
@@ -149,7 +153,14 @@ const els = {
   tabs: document.querySelectorAll(".tab"),
   views: document.querySelectorAll(".view"),
   learnModeButtons: document.querySelectorAll("[data-learn-mode]"),
+  answerSideButtons: document.querySelectorAll("[data-answer-side]"),
   hardOnlyToggle: document.querySelector("#hardOnlyToggle"),
+  sessionSizeInput: document.querySelector("#sessionSizeInput"),
+  sessionDownBtn: document.querySelector("#sessionDownBtn"),
+  sessionUpBtn: document.querySelector("#sessionUpBtn"),
+  startSessionBtn: document.querySelector("#startSessionBtn"),
+  clearSessionBtn: document.querySelector("#clearSessionBtn"),
+  sessionCountLabel: document.querySelector("#sessionCountLabel"),
   dailyGoalInput: document.querySelector("#dailyGoalInput"),
   goalDownBtn: document.querySelector("#goalDownBtn"),
   goalUpBtn: document.querySelector("#goalUpBtn"),
@@ -167,6 +178,8 @@ const els = {
   feedbackBox: document.querySelector("#feedbackBox"),
   feedbackTitle: document.querySelector("#feedbackTitle"),
   feedbackDetail: document.querySelector("#feedbackDetail"),
+  overrideIncorrectBtn: document.querySelector("#overrideIncorrectBtn"),
+  overrideCorrectBtn: document.querySelector("#overrideCorrectBtn"),
   skipLearnBtn: document.querySelector("#skipLearnBtn"),
   nextQuestionBtn: document.querySelector("#nextQuestionBtn")
 };
@@ -186,6 +199,7 @@ function bindEvents() {
   els.csvFile.addEventListener("change", handleFileImport);
   els.loadSampleBtn.addEventListener("click", () => {
     state.deck = sampleDeck.map(normalizeCard);
+    state.settings.sessionIds = [];
     state.currentIndex = 0;
     state.isFlipped = false;
     saveState();
@@ -258,18 +272,36 @@ function bindEvents() {
     });
   });
 
+  els.answerSideButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      state.settings.answerSide = button.dataset.answerSide;
+      saveState();
+      syncAnswerSideButtons();
+      nextLearnQuestion();
+    });
+  });
+
   els.hardOnlyToggle.addEventListener("change", (event) => {
     state.settings.hardOnly = event.target.checked;
     saveState();
     nextLearnQuestion();
   });
 
+  els.sessionSizeInput.addEventListener("change", (event) => {
+    updateSessionSize(Number(event.target.value));
+  });
+  els.sessionDownBtn.addEventListener("click", () => updateSessionSize(state.settings.sessionSize - 1));
+  els.sessionUpBtn.addEventListener("click", () => updateSessionSize(state.settings.sessionSize + 1));
+  els.startSessionBtn.addEventListener("click", startLimitedSession);
+  els.clearSessionBtn.addEventListener("click", clearLimitedSession);
   els.dailyGoalInput.addEventListener("change", (event) => {
     updateDailyGoal(Number(event.target.value));
   });
   els.goalDownBtn.addEventListener("click", () => updateDailyGoal(state.settings.dailyGoal - 1));
   els.goalUpBtn.addEventListener("click", () => updateDailyGoal(state.settings.dailyGoal + 1));
   els.writtenForm.addEventListener("submit", handleWrittenSubmit);
+  els.overrideIncorrectBtn.addEventListener("click", () => overrideLastAnswer(false));
+  els.overrideCorrectBtn.addEventListener("click", () => overrideLastAnswer(true));
   els.skipLearnBtn.addEventListener("click", nextLearnQuestion);
   els.nextQuestionBtn.addEventListener("click", nextLearnQuestion);
 
@@ -295,6 +327,7 @@ function handleFileImport(event) {
       const imported = parseCsv(String(reader.result || ""));
       if (!imported.length) throw new Error("No vocabulary rows found.");
       state.deck = imported.map(normalizeCard).filter((card) => card.term && card.definition);
+      state.settings.sessionIds = [];
       state.currentIndex = 0;
       state.isFlipped = false;
       state.learn.currentCard = null;
@@ -476,12 +509,16 @@ function renderLibrary() {
   state.filteredDeck.forEach((card) => {
     const item = els.wordItemTemplate.content.firstElementChild.cloneNode(true);
     const progress = getProgress(card.id);
+    item.dataset.cardId = card.id;
     item.querySelector("h3").textContent = card.term;
     item.querySelector("p").textContent = card.definition;
     item.querySelector(".tier-pill").textContent = card.tier;
     const statusPill = item.querySelector(".status-pill");
     statusPill.textContent = statusLabel(progress.status || "unknown");
     statusPill.classList.add(progress.status || "unknown");
+    item.querySelectorAll("[data-card-action]").forEach((button) => {
+      button.addEventListener("click", () => markSpecificCard(card.id, button.dataset.cardAction));
+    });
     fragment.append(item);
   });
   els.wordList.append(fragment);
@@ -574,18 +611,27 @@ function markCurrentCard(status) {
   const card = getCurrentCard();
   if (!card) return;
 
-  const progress = getProgress(card.id);
+  markCardStatus(card.id, status, true);
+  window.setTimeout(nextCard, 180);
+}
+
+function markSpecificCard(cardId, status) {
+  markCardStatus(cardId, status, false);
+  if (state.learn.currentCard?.id === cardId) renderLearnQuestion();
+}
+
+function markCardStatus(cardId, status, countReview) {
+  const progress = getProgress(cardId);
   progress.status = status;
   progress.updatedAt = new Date().toISOString();
-  progress.reviews = (progress.reviews || 0) + 1;
   progress.lastReviewedAt = progress.updatedAt;
+  if (countReview) progress.reviews = (progress.reviews || 0) + 1;
   saveState();
   syncAnswerButtons();
   renderMeter();
   renderLibrary();
   renderDashboard();
   renderLearnStats();
-  window.setTimeout(nextCard, 180);
 }
 
 function nextLearnQuestion() {
@@ -597,7 +643,7 @@ function nextLearnQuestion() {
 }
 
 function selectLearnCard() {
-  const pool = state.deck.filter((card) => !state.settings.hardOnly || isHardCard(card));
+  const pool = getLearnPool();
   if (!pool.length) return state.deck[0] || null;
 
   const currentId = state.learn.currentCard?.id;
@@ -610,6 +656,15 @@ function selectLearnCard() {
 
   const candidates = shuffle(weighted).filter((card) => card.id !== currentId);
   return candidates[0] || sorted[0] || null;
+}
+
+function getLearnPool() {
+  const sessionIds = new Set(state.settings.sessionIds || []);
+  return state.deck.filter((card) => {
+    const inSession = !sessionIds.size || sessionIds.has(card.id);
+    const passesHardFilter = !state.settings.hardOnly || isHardCard(card);
+    return inSession && passesHardFilter;
+  });
 }
 
 function renderLearnQuestion() {
@@ -636,20 +691,28 @@ function renderLearnQuestion() {
 
   const progress = getProgress(card.id);
   const mode = state.settings.learnMode;
+  const answerSide = getActiveAnswerSide();
   const dueText = isDue(card) ? "Due now" : `Due ${formatDue(progress.dueAt)}`;
-  els.learnMeta.textContent = `${card.tier} - ${dueText}`;
+  els.learnMeta.textContent = `${card.tier} - ${dueText} - ${answerSide === "term" ? "Answer term" : "Answer definition"}`;
 
   if (mode === "written") {
     els.questionTypeLabel.textContent = "Written answer";
-    els.questionPrompt.textContent = card.definition;
-    els.questionClue.textContent = "Type the vocabulary word. Case and punctuation do not matter.";
+    els.questionPrompt.textContent = getQuestionPrompt(card);
+    els.questionClue.textContent = answerSide === "term"
+      ? "Type the vocabulary word. Case and punctuation do not matter."
+      : "Type the definition in your own words. Key meaning words matter most.";
+    els.writtenAnswer.placeholder = answerSide === "term" ? "Type the vocabulary word" : "Type the definition";
     els.writtenForm.style.display = "grid";
     els.choiceGrid.style.display = "none";
     window.setTimeout(() => els.writtenAnswer.focus(), 0);
   } else {
     els.questionTypeLabel.textContent = mode === "sat" ? "SAT-style blank" : "Multiple choice";
-    els.questionPrompt.textContent = mode === "sat" ? makeBlankSentence(card) : "Choose the word that best matches this definition.";
-    els.questionClue.textContent = mode === "sat" ? card.definition : card.definition;
+    els.questionPrompt.textContent = mode === "sat" ? makeBlankSentence(card) : getQuestionPrompt(card);
+    els.questionClue.textContent = mode === "sat"
+      ? card.definition
+      : answerSide === "term"
+        ? "Choose the term that matches this definition."
+        : "Choose the definition that matches this term.";
     els.writtenForm.style.display = "none";
     els.choiceGrid.style.display = "grid";
     renderChoices(card);
@@ -667,10 +730,27 @@ function renderChoices(card) {
     const button = document.createElement("button");
     button.className = "choice-button";
     button.type = "button";
-    button.textContent = option.term;
-    button.addEventListener("click", () => handleChoiceAnswer(card, option.term, button));
+    button.textContent = getAnswerText(option);
+    button.dataset.answer = getAnswerText(option);
+    button.addEventListener("click", () => handleChoiceAnswer(card, button.dataset.answer, button));
     els.choiceGrid.append(button);
   });
+}
+
+function getActiveAnswerSide() {
+  return state.settings.learnMode === "sat" ? "term" : state.settings.answerSide;
+}
+
+function getQuestionPrompt(card) {
+  return getActiveAnswerSide() === "term" ? card.definition : card.term;
+}
+
+function getAnswerText(card) {
+  return getActiveAnswerSide() === "term" ? card.term : card.definition;
+}
+
+function getCorrectAnswer(card) {
+  return getAnswerText(card);
 }
 
 function handleWrittenSubmit(event) {
@@ -679,34 +759,46 @@ function handleWrittenSubmit(event) {
   if (!card || state.learn.answered) return;
 
   const answer = els.writtenAnswer.value;
-  const isCorrect = isAnswerCorrect(answer, card.term);
+  const isCorrect = isAnswerCorrect(answer, getCorrectAnswer(card), card);
   recordLearnAnswer(card, isCorrect);
   showFeedback(isCorrect, card, answer);
 }
 
-function handleChoiceAnswer(card, selectedTerm, selectedButton) {
+function handleChoiceAnswer(card, selectedAnswer, selectedButton) {
   if (state.learn.answered) return;
-  const isCorrect = normalizeAnswer(selectedTerm) === normalizeAnswer(card.term);
+  const isCorrect = normalizeAnswer(selectedAnswer) === normalizeAnswer(getCorrectAnswer(card));
   recordLearnAnswer(card, isCorrect);
 
   els.choiceGrid.querySelectorAll(".choice-button").forEach((button) => {
-    const buttonIsCorrect = normalizeAnswer(button.textContent) === normalizeAnswer(card.term);
+    const buttonIsCorrect = normalizeAnswer(button.dataset.answer) === normalizeAnswer(getCorrectAnswer(card));
     button.disabled = true;
     if (buttonIsCorrect) button.classList.add("correct");
   });
   if (!isCorrect) selectedButton.classList.add("incorrect");
-  showFeedback(isCorrect, card, selectedTerm);
+  showFeedback(isCorrect, card, selectedAnswer);
 }
 
 function recordLearnAnswer(card, isCorrect) {
   const progress = getProgress(card.id);
   const now = new Date();
+  progress.reviews = (progress.reviews || 0) + 1;
+  progress.learnReviews = (progress.learnReviews || 0) + 1;
+  applyAnswerResult(progress, isCorrect, now);
+  recordActivity(now);
+  state.learn.answered = true;
+  state.learn.lastAnsweredCard = {
+    id: card.id,
+    originalCorrect: isCorrect
+  };
+  saveState();
+  refreshAll();
+}
+
+function applyAnswerResult(progress, isCorrect, now) {
   const nowIso = now.toISOString();
   const previousInterval = Number(progress.intervalDays || 0);
   const previousEase = Number(progress.ease || 2.3);
 
-  progress.reviews = (progress.reviews || 0) + 1;
-  progress.learnReviews = (progress.learnReviews || 0) + 1;
   progress.correct = (progress.correct || 0) + (isCorrect ? 1 : 0);
   progress.incorrect = (progress.incorrect || 0) + (isCorrect ? 0 : 1);
   progress.lastAnswerCorrect = isCorrect;
@@ -724,11 +816,6 @@ function recordLearnAnswer(card, isCorrect) {
     progress.ease = Math.max(previousEase - 0.22, 1.3);
     progress.dueAt = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
   }
-
-  recordActivity(now);
-  state.learn.answered = true;
-  saveState();
-  refreshAll();
 }
 
 function showFeedback(isCorrect, card, submittedAnswer) {
@@ -738,7 +825,25 @@ function showFeedback(isCorrect, card, submittedAnswer) {
   els.feedbackTitle.textContent = isCorrect ? "Correct" : "Not quite";
   els.feedbackDetail.textContent = isCorrect
     ? `${card.term}: ${card.definition}`
-    : `You answered "${String(submittedAnswer || "").trim() || "blank"}". Correct answer: ${card.term}. ${card.definition}`;
+    : `You answered "${String(submittedAnswer || "").trim() || "blank"}". Correct answer: ${sentenceWithPeriod(getCorrectAnswer(card))} ${card.term}: ${card.definition}`;
+}
+
+function overrideLastAnswer(isCorrect) {
+  const card = state.learn.lastAnsweredCard
+    ? state.deck.find((candidate) => candidate.id === state.learn.lastAnsweredCard.id)
+    : state.learn.currentCard;
+  if (!card) return;
+
+  const progress = getProgress(card.id);
+  const previous = progress.lastAnswerCorrect;
+  if (previous === true) progress.correct = Math.max(0, (progress.correct || 0) - 1);
+  if (previous === false) progress.incorrect = Math.max(0, (progress.incorrect || 0) - 1);
+  applyAnswerResult(progress, isCorrect, new Date());
+  state.learn.answered = true;
+  state.learn.lastAnsweredCard = { id: card.id, originalCorrect: isCorrect };
+  saveState();
+  refreshAll();
+  showFeedback(isCorrect, card, "manual override");
 }
 
 function clearFeedback() {
@@ -797,12 +902,48 @@ function includesTerm(sentence, term) {
   return new RegExp(`\\b${escapeRegExp(term)}\\b`, "i").test(sentence);
 }
 
-function isAnswerCorrect(answer, correctTerm) {
+function isAnswerCorrect(answer, correctAnswer, card) {
   const normalizedAnswer = normalizeAnswer(answer);
-  const normalizedTerm = normalizeAnswer(correctTerm);
+  const normalizedCorrect = normalizeAnswer(correctAnswer);
   if (!normalizedAnswer) return false;
-  if (normalizedAnswer === normalizedTerm) return true;
-  return normalizedTerm.length >= 6 && levenshtein(normalizedAnswer, normalizedTerm) <= 1;
+  if (normalizedAnswer === normalizedCorrect) return true;
+  if (getActiveAnswerSide() === "term") {
+    return normalizedCorrect.length >= 6 && levenshtein(normalizedAnswer, normalizedCorrect) <= 1;
+  }
+  return definitionSimilarity(normalizedAnswer, normalizeAnswer(card.definition)) >= 0.58;
+}
+
+function definitionSimilarity(answer, definition) {
+  const answerWords = importantWords(answer);
+  const definitionWords = importantWords(definition);
+  if (!answerWords.length || !definitionWords.length) return 0;
+  const matches = definitionWords.filter((word) => answerWords.includes(word)).length;
+  return matches / definitionWords.length;
+}
+
+function importantWords(value) {
+  const stopWords = new Set([
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "be",
+    "being",
+    "for",
+    "in",
+    "is",
+    "it",
+    "of",
+    "or",
+    "the",
+    "to",
+    "very",
+    "with"
+  ]);
+  return normalizeAnswer(value)
+    .split(" ")
+    .filter((word) => word.length > 2 && !stopWords.has(word));
 }
 
 function normalizeAnswer(value) {
@@ -885,22 +1026,55 @@ function renderLearnStats() {
   const today = getTodayReviews();
   const goal = state.settings.dailyGoal;
   const percent = Math.min(100, Math.round((today / goal) * 100));
-  const due = state.deck.filter(isDue).length;
+  const sessionIds = new Set(state.settings.sessionIds || []);
+  const due = getLearnPool().filter(isDue).length;
   els.todayGoalLabel.textContent = `${today} / ${goal}`;
   els.todayGoalBar.style.width = `${percent}%`;
   els.learnDueCount.textContent = `${due} due`;
+  els.sessionCountLabel.textContent = sessionIds.size ? `${sessionIds.size} selected` : "All cards";
 }
 
 function hydrateSettingsControls() {
   els.dailyGoalInput.value = state.settings.dailyGoal;
+  els.sessionSizeInput.value = state.settings.sessionSize;
   els.hardOnlyToggle.checked = state.settings.hardOnly;
   syncLearnModeButtons();
+  syncAnswerSideButtons();
 }
 
 function syncLearnModeButtons() {
   els.learnModeButtons.forEach((button) => {
     button.classList.toggle("is-active", button.dataset.learnMode === state.settings.learnMode);
   });
+}
+
+function syncAnswerSideButtons() {
+  els.answerSideButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.answerSide === state.settings.answerSide);
+  });
+}
+
+function updateSessionSize(value) {
+  state.settings.sessionSize = Math.max(1, Math.min(200, Number.isFinite(value) ? Math.round(value) : 20));
+  els.sessionSizeInput.value = state.settings.sessionSize;
+  saveState();
+  renderLearnStats();
+}
+
+function startLimitedSession() {
+  updateSessionSize(Number(els.sessionSizeInput.value));
+  const pool = state.deck.filter((card) => !state.settings.hardOnly || isHardCard(card));
+  const sorted = shuffle([...pool].sort((a, b) => getPriorityScore(b) - getPriorityScore(a)));
+  const picked = sorted.slice(0, Math.min(state.settings.sessionSize, sorted.length));
+  state.settings.sessionIds = picked.map((card) => card.id);
+  saveState();
+  nextLearnQuestion();
+}
+
+function clearLimitedSession() {
+  state.settings.sessionIds = [];
+  saveState();
+  nextLearnQuestion();
 }
 
 function updateDailyGoal(value) {
@@ -991,6 +1165,7 @@ function loadState() {
     state.deck = Array.isArray(saved.deck) ? saved.deck.map(normalizeCard) : [];
     state.progress = saved.progress || {};
     state.settings = { ...defaultSettings, ...(saved.settings || {}) };
+    if (!Array.isArray(state.settings.sessionIds)) state.settings.sessionIds = [];
   } catch {
     state.deck = [];
     state.progress = {};
@@ -1101,6 +1276,11 @@ function formatDue(dueAt) {
 
 function titleCase(value) {
   return String(value).replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+}
+
+function sentenceWithPeriod(value) {
+  const text = String(value || "").trim();
+  return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
 init();

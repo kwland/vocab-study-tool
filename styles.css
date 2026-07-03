@@ -414,6 +414,10 @@ select {
   padding: 4px;
 }
 
+.segmented-control.two-up {
+  grid-template-columns: repeat(2, 1fr);
+}
+
 .segment {
   min-height: 38px;
   border: 0;
@@ -470,6 +474,19 @@ select {
   background: #fff;
   color: var(--ink);
   text-align: center;
+  font-weight: 800;
+}
+
+.section-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.section-label-row span {
+  color: var(--muted);
+  font-size: 0.82rem;
   font-weight: 800;
 }
 
@@ -725,6 +742,12 @@ h1 {
   line-height: 1.45;
 }
 
+.override-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .learn-actions {
   display: flex;
   justify-content: flex-end;
@@ -802,9 +825,9 @@ h1 {
 }
 
 .word-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -860,6 +883,32 @@ h1 {
 .status-pill.dontKnow {
   background: #fee2e2;
   color: #991b1b;
+}
+
+.word-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.word-actions button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--ink);
+  padding: 0 10px;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.word-actions button[data-card-action="known"] {
+  border-color: #b9e6c9;
+  color: var(--green);
+}
+
+.word-actions button[data-card-action="dontKnow"] {
+  border-color: #facfc8;
+  color: var(--red);
 }
 
 .stats-grid {
@@ -1020,6 +1069,7 @@ h1 {
   .filter-grid,
   .button-row,
   .answer-actions,
+  .override-actions,
   .learn-actions {
     grid-template-columns: 1fr;
     flex-direction: column;
@@ -1027,6 +1077,7 @@ h1 {
 
   .secondary-button,
   .answer-button,
+  .override-actions .secondary-button,
   .learn-actions .primary-button {
     width: 100%;
   }
@@ -1053,6 +1104,14 @@ h1 {
 
   .word-item {
     align-items: flex-start;
-    flex-direction: column;
+    grid-template-columns: 1fr;
+  }
+
+  .word-actions {
+    width: 100%;
+  }
+
+  .word-actions button {
+    flex: 1;
   }
 }

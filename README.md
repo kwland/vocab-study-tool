@@ -21,6 +21,10 @@ The importer also accepts `word` instead of `term`, `meaning` instead of `defini
 - Mark words as `Know` or `Don't know`
 - Browser-saved progress
 - Learn mode with written answers, difficult multiple choice, and SAT-style blanks
+- Switch Learn mode between answering with terms or definitions
+- Sample a smaller set of cards for a focused Learn session
+- Override a graded answer as correct or incorrect
+- Manually mark specific library cards as `Know` or `Don't know`
 - Spaced repetition that brings weak words back sooner
 - Confusing-word pair hints
 - Hard words only mode

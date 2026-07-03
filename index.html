@@ -156,6 +156,14 @@
                 </div>
               </div>
 
+              <div class="panel-section">
+                <span class="field-label">Answer side</span>
+                <div class="segmented-control two-up" role="group" aria-label="Answer side">
+                  <button class="segment is-active" type="button" data-answer-side="term">Term</button>
+                  <button class="segment" type="button" data-answer-side="definition">Definition</button>
+                </div>
+              </div>
+
               <label class="toggle-row">
                 <input id="hardOnlyToggle" type="checkbox">
                 <span>
@@ -163,6 +171,22 @@
                   <small>Missed, weak, or due soon</small>
                 </span>
               </label>
+
+              <div class="panel-section">
+                <div class="section-label-row">
+                  <label class="field-label" for="sessionSizeInput">Cards this session</label>
+                  <span id="sessionCountLabel">All cards</span>
+                </div>
+                <div class="goal-stepper">
+                  <button type="button" id="sessionDownBtn" aria-label="Lower session size">-</button>
+                  <input id="sessionSizeInput" type="number" min="1" max="200" step="1">
+                  <button type="button" id="sessionUpBtn" aria-label="Raise session size">+</button>
+                </div>
+                <div class="button-row">
+                  <button class="secondary-button" type="button" id="startSessionBtn">Sample set</button>
+                  <button class="secondary-button" type="button" id="clearSessionBtn">All cards</button>
+                </div>
+              </div>
 
               <div class="panel-section">
                 <label class="field-label" for="dailyGoalInput">Daily goal</label>
@@ -216,6 +240,10 @@
                 <div class="feedback-box" id="feedbackBox" hidden>
                   <strong id="feedbackTitle"></strong>
                   <p id="feedbackDetail"></p>
+                  <div class="override-actions">
+                    <button class="secondary-button" type="button" id="overrideIncorrectBtn">Mark incorrect</button>
+                    <button class="secondary-button" type="button" id="overrideCorrectBtn">Mark correct</button>
+                  </div>
                 </div>
               </article>
 
@@ -315,6 +343,10 @@
           <p></p>
         </div>
         <span class="status-pill"></span>
+        <div class="word-actions">
+          <button type="button" data-card-action="dontKnow">Don't know</button>
+          <button type="button" data-card-action="known">Know</button>
+        </div>
       </article>
     </template>
 
