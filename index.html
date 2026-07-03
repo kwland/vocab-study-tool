@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Vocab Deck</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#study" aria-label="Vocab Deck home">
+          <span class="brand-mark" aria-hidden="true">
+            <span>V</span>
+          </span>
+          <span class="brand-copy">
+            <strong>Vocab Deck</strong>
+            <small>Personal SAT vocabulary practice</small>
+          </span>
+        </a>
+
+        <nav class="tabs" aria-label="Primary">
+          <button class="tab is-active" type="button" data-view="study">Study</button>
+          <button class="tab" type="button" data-view="library">Library</button>
+          <button class="tab" type="button" data-view="dashboard">Dashboard</button>
+        </nav>
+      </header>
+
+      <main>
+        <section class="view study-view is-active" id="study" aria-labelledby="study-title">
+          <div class="study-layout">
+            <aside class="side-panel" aria-label="Deck controls">
+              <div class="panel-section">
+                <label class="file-drop" for="csvFile">
+                  <input id="csvFile" type="file" accept=".csv,text/csv">
+                  <span class="file-icon" aria-hidden="true">+</span>
+                  <span>
+                    <strong>Import CSV</strong>
+                    <small>term, definition, tier, example</small>
+                  </span>
+                </label>
+                <div class="import-actions">
+                  <button class="text-button" type="button" id="loadSampleBtn">Load sample</button>
+                  <a class="text-link" href="sample-vocab.csv" download>Sample CSV</a>
+                </div>
+              </div>
+
+              <div class="panel-section">
+                <label class="field-label" for="searchInput">Search</label>
+                <div class="search-box">
+                  <span aria-hidden="true">&#8981;</span>
+                  <input id="searchInput" type="search" placeholder="Word or definition">
+                </div>
+              </div>
+
+              <div class="filter-grid">
+                <label>
+                  <span class="field-label">Tier</span>
+                  <select id="tierFilter">
+                    <option value="all">All tiers</option>
+                  </select>
+                </label>
+                <label>
+                  <span class="field-label">Status</span>
+                  <select id="statusFilter">
+                    <option value="all">All words</option>
+                    <option value="unknown">Not marked</option>
+                    <option value="known">Know</option>
+                    <option value="dontKnow">Don't know</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="button-row">
+                <button class="secondary-button" type="button" id="shuffleBtn">
+                  <span aria-hidden="true">&#8635;</span>
+                  Shuffle
+                </button>
+                <button class="secondary-button" type="button" id="resetFiltersBtn">
+                  <span aria-hidden="true">&#215;</span>
+                  Clear
+                </button>
+              </div>
+
+              <div class="deck-meter" aria-label="Current deck progress">
+                <div>
+                  <span id="meterLabel">0 of 0</span>
+                  <strong id="meterPercent">0%</strong>
+                </div>
+                <div class="meter-track">
+                  <span id="meterBar"></span>
+                </div>
+              </div>
+            </aside>
+
+            <section class="study-stage" aria-live="polite">
+              <div class="stage-header">
+                <div>
+                  <p class="eyebrow" id="currentTier">No deck loaded</p>
+                  <h1 id="study-title">Vocabulary Flashcards</h1>
+                </div>
+                <div class="card-count" id="cardCounter">0 cards</div>
+              </div>
+
+              <article class="flashcard" id="flashcard" tabindex="0" role="button" aria-label="Flip flashcard">
+                <div class="flashcard-inner">
+                  <div class="flashcard-face flashcard-front">
+                    <p class="face-label">Term</p>
+                    <h2 id="cardTerm">Import a CSV to begin</h2>
+                    <p class="hint">Tap to reveal the definition</p>
+                  </div>
+                  <div class="flashcard-face flashcard-back">
+                    <p class="face-label">Definition</p>
+                    <h2 id="cardDefinition">Your words will appear here.</h2>
+                    <p id="cardExample" class="example"></p>
+                  </div>
+                </div>
+              </article>
+
+              <div class="answer-actions">
+                <button class="answer-button dont" type="button" id="dontKnowBtn">
+                  <span aria-hidden="true">!</span>
+                  Don't know
+                </button>
+                <button class="answer-button know" type="button" id="knowBtn">
+                  <span aria-hidden="true">&#10003;</span>
+                  Know
+                </button>
+              </div>
+
+              <div class="nav-actions">
+                <button class="icon-button" type="button" id="prevBtn" aria-label="Previous card">&lt;</button>
+                <button class="primary-button" type="button" id="flipBtn">Flip card</button>
+                <button class="icon-button" type="button" id="nextBtn" aria-label="Next card">&gt;</button>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view library-view" id="library" aria-labelledby="library-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Deck library</p>
+              <h1 id="library-title">Words in this session</h1>
+            </div>
+            <button class="secondary-button" type="button" id="exportBtn">
+              <span aria-hidden="true">&#8595;</span>
+              Export progress
+            </button>
+          </div>
+          <div class="word-list" id="wordList"></div>
+        </section>
+
+        <section class="view dashboard-view" id="dashboard" aria-labelledby="dashboard-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Progress</p>
+              <h1 id="dashboard-title">Dashboard</h1>
+            </div>
+            <button class="danger-button" type="button" id="clearProgressBtn">Reset progress</button>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <span>Total words</span>
+              <strong id="totalWords">0</strong>
+            </div>
+            <div class="stat-card">
+              <span>Know</span>
+              <strong id="knownWords">0</strong>
+            </div>
+            <div class="stat-card">
+              <span>Don't know</span>
+              <strong id="dontKnowWords">0</strong>
+            </div>
+            <div class="stat-card">
+              <span>Mastery</span>
+              <strong id="masteryRate">0%</strong>
+            </div>
+          </div>
+
+          <div class="dashboard-grid">
+            <section class="chart-panel" aria-labelledby="tier-title">
+              <h2 id="tier-title">Tier breakdown</h2>
+              <div id="tierChart" class="tier-chart"></div>
+            </section>
+
+            <section class="roadmap-panel" aria-labelledby="roadmap-title">
+              <h2 id="roadmap-title">Built for the next version</h2>
+              <ul>
+                <li><span></span>Spaced repetition scheduling</li>
+                <li><span></span>SAT-style fill-in-the-blank practice</li>
+                <li><span></span>Confusing-word pairs and hard-words mode</li>
+                <li><span></span>Daily goals, streaks, and backup exports</li>
+              </ul>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="wordItemTemplate">
+      <article class="word-item">
+        <div>
+          <div class="word-title-row">
+            <h3></h3>
+            <span class="tier-pill"></span>
+          </div>
+          <p></p>
+        </div>
+        <span class="status-pill"></span>
+      </article>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
