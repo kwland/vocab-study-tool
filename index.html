@@ -21,6 +21,7 @@
 
         <nav class="tabs" aria-label="Primary">
           <button class="tab is-active" type="button" data-view="study">Study</button>
+          <button class="tab" type="button" data-view="learn">Learn</button>
           <button class="tab" type="button" data-view="library">Library</button>
           <button class="tab" type="button" data-view="dashboard">Dashboard</button>
         </nav>
@@ -137,6 +138,95 @@
           </div>
         </section>
 
+        <section class="view learn-view" id="learn" aria-labelledby="learn-title">
+          <div class="learn-layout">
+            <aside class="learn-panel" aria-label="Learn settings">
+              <div class="panel-section">
+                <p class="eyebrow">Adaptive practice</p>
+                <h2>Learn mode</h2>
+                <p class="panel-copy">Questions favor weak and due words, so missed terms come back sooner.</p>
+              </div>
+
+              <div class="panel-section">
+                <span class="field-label">Question type</span>
+                <div class="segmented-control" role="group" aria-label="Question type">
+                  <button class="segment is-active" type="button" data-learn-mode="written">Written</button>
+                  <button class="segment" type="button" data-learn-mode="multiple">Multiple</button>
+                  <button class="segment" type="button" data-learn-mode="sat">SAT blank</button>
+                </div>
+              </div>
+
+              <label class="toggle-row">
+                <input id="hardOnlyToggle" type="checkbox">
+                <span>
+                  <strong>Hard words only</strong>
+                  <small>Missed, weak, or due soon</small>
+                </span>
+              </label>
+
+              <div class="panel-section">
+                <label class="field-label" for="dailyGoalInput">Daily goal</label>
+                <div class="goal-stepper">
+                  <button type="button" id="goalDownBtn" aria-label="Lower daily goal">-</button>
+                  <input id="dailyGoalInput" type="number" min="1" max="200" step="1">
+                  <button type="button" id="goalUpBtn" aria-label="Raise daily goal">+</button>
+                </div>
+              </div>
+
+              <div class="learn-meter">
+                <div>
+                  <span>Today</span>
+                  <strong id="todayGoalLabel">0 / 20</strong>
+                </div>
+                <div class="meter-track">
+                  <span id="todayGoalBar"></span>
+                </div>
+              </div>
+
+              <div class="confusing-panel">
+                <span class="field-label">Confusing pair</span>
+                <p id="confusingPairText">Practice will flag common look-alikes when they appear.</p>
+              </div>
+            </aside>
+
+            <section class="learn-stage" aria-live="polite">
+              <div class="stage-header">
+                <div>
+                  <p class="eyebrow" id="learnMeta">Ready</p>
+                  <h1 id="learn-title">Learn Vocabulary</h1>
+                </div>
+                <div class="card-count" id="learnDueCount">0 due</div>
+              </div>
+
+              <article class="question-card">
+                <p class="face-label" id="questionTypeLabel">Written answer</p>
+                <h2 id="questionPrompt">Type the word that matches the definition.</h2>
+                <p class="question-subtext" id="questionClue">Import words or use the sample deck to begin.</p>
+
+                <form class="written-answer" id="writtenForm">
+                  <label class="field-label" for="writtenAnswer">Your answer</label>
+                  <div class="answer-input-row">
+                    <input id="writtenAnswer" type="text" autocomplete="off" placeholder="Type the vocabulary word">
+                    <button class="primary-button" type="submit">Check</button>
+                  </div>
+                </form>
+
+                <div class="choice-grid" id="choiceGrid"></div>
+
+                <div class="feedback-box" id="feedbackBox" hidden>
+                  <strong id="feedbackTitle"></strong>
+                  <p id="feedbackDetail"></p>
+                </div>
+              </article>
+
+              <div class="learn-actions">
+                <button class="secondary-button" type="button" id="skipLearnBtn">Skip</button>
+                <button class="primary-button" type="button" id="nextQuestionBtn">Next question</button>
+              </div>
+            </section>
+          </div>
+        </section>
+
         <section class="view library-view" id="library" aria-labelledby="library-title">
           <div class="section-heading">
             <div>
@@ -177,6 +267,22 @@
               <span>Mastery</span>
               <strong id="masteryRate">0%</strong>
             </div>
+            <div class="stat-card">
+              <span>Due now</span>
+              <strong id="dueWords">0</strong>
+            </div>
+            <div class="stat-card">
+              <span>Today</span>
+              <strong id="todayReviews">0</strong>
+            </div>
+            <div class="stat-card">
+              <span>Streak</span>
+              <strong id="reviewStreak">0</strong>
+            </div>
+            <div class="stat-card">
+              <span>Hard words</span>
+              <strong id="hardWords">0</strong>
+            </div>
           </div>
 
           <div class="dashboard-grid">
@@ -186,10 +292,10 @@
             </section>
 
             <section class="roadmap-panel" aria-labelledby="roadmap-title">
-              <h2 id="roadmap-title">Built for the next version</h2>
+              <h2 id="roadmap-title">Learning tools active</h2>
               <ul>
-                <li><span></span>Spaced repetition scheduling</li>
-                <li><span></span>SAT-style fill-in-the-blank practice</li>
+                <li><span></span>Spaced repetition brings missed words back sooner</li>
+                <li><span></span>Written, multiple choice, and SAT blank questions</li>
                 <li><span></span>Confusing-word pairs and hard-words mode</li>
                 <li><span></span>Daily goals, streaks, and backup exports</li>
               </ul>

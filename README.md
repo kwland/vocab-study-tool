@@ -20,6 +20,11 @@ The importer also accepts `word` instead of `term`, `meaning` instead of `defini
 - Flip animation
 - Mark words as `Know` or `Don't know`
 - Browser-saved progress
+- Learn mode with written answers, difficult multiple choice, and SAT-style blanks
+- Spaced repetition that brings weak words back sooner
+- Confusing-word pair hints
+- Hard words only mode
+- Daily goal tracking and review streaks
 - Tier filter
 - Shuffle
 - Search

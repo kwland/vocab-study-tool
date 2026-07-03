@@ -1,4 +1,6 @@
-const STORAGE_KEY = "vocabDeck.v1";
+const STORAGE_KEY = "vocabDeck.v2";
+const OLD_STORAGE_KEY = "vocabDeck.v1";
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const sampleDeck = [
   {
@@ -18,6 +20,18 @@ const sampleDeck = [
     definition: "Truthful and straightforward.",
     tier: "Tier 1",
     example: "Her candid response made the discussion easier."
+  },
+  {
+    term: "Implicit",
+    definition: "Suggested or understood without being directly stated.",
+    tier: "Tier 2",
+    example: "The author's implicit criticism appears in the final paragraph."
+  },
+  {
+    term: "Explicit",
+    definition: "Stated clearly and directly.",
+    tier: "Tier 2",
+    example: "The rubric gives explicit instructions for each response."
   },
   {
     term: "Deference",
@@ -48,12 +62,40 @@ const sampleDeck = [
     definition: "To make something less severe or harmful.",
     tier: "Tier 3",
     example: "Shade trees can mitigate heat in cities."
+  },
+  {
+    term: "Exacerbate",
+    definition: "To make a problem, bad situation, or negative feeling worse.",
+    tier: "Tier 3",
+    example: "Ignoring the leak will exacerbate the damage."
   }
 ];
+
+const confusingPairs = [
+  ["implicit", "explicit"],
+  ["mitigate", "exacerbate"],
+  ["infer", "imply"],
+  ["affect", "effect"],
+  ["elicit", "illicit"],
+  ["eminent", "imminent"],
+  ["compliment", "complement"],
+  ["precede", "proceed"],
+  ["ambivalent", "indifferent"],
+  ["tenuous", "tenacious"],
+  ["adapt", "adopt"],
+  ["averse", "adverse"]
+];
+
+const defaultSettings = {
+  dailyGoal: 20,
+  learnMode: "written",
+  hardOnly: false
+};
 
 const state = {
   deck: [],
   progress: {},
+  settings: { ...defaultSettings },
   filteredDeck: [],
   currentIndex: 0,
   isFlipped: false,
@@ -61,6 +103,11 @@ const state = {
     tier: "all",
     status: "all",
     search: ""
+  },
+  learn: {
+    currentCard: null,
+    options: [],
+    answered: false
   }
 };
 
@@ -93,10 +140,35 @@ const els = {
   knownWords: document.querySelector("#knownWords"),
   dontKnowWords: document.querySelector("#dontKnowWords"),
   masteryRate: document.querySelector("#masteryRate"),
+  dueWords: document.querySelector("#dueWords"),
+  todayReviews: document.querySelector("#todayReviews"),
+  reviewStreak: document.querySelector("#reviewStreak"),
+  hardWords: document.querySelector("#hardWords"),
   tierChart: document.querySelector("#tierChart"),
   wordItemTemplate: document.querySelector("#wordItemTemplate"),
   tabs: document.querySelectorAll(".tab"),
-  views: document.querySelectorAll(".view")
+  views: document.querySelectorAll(".view"),
+  learnModeButtons: document.querySelectorAll("[data-learn-mode]"),
+  hardOnlyToggle: document.querySelector("#hardOnlyToggle"),
+  dailyGoalInput: document.querySelector("#dailyGoalInput"),
+  goalDownBtn: document.querySelector("#goalDownBtn"),
+  goalUpBtn: document.querySelector("#goalUpBtn"),
+  todayGoalLabel: document.querySelector("#todayGoalLabel"),
+  todayGoalBar: document.querySelector("#todayGoalBar"),
+  confusingPairText: document.querySelector("#confusingPairText"),
+  learnMeta: document.querySelector("#learnMeta"),
+  learnDueCount: document.querySelector("#learnDueCount"),
+  questionTypeLabel: document.querySelector("#questionTypeLabel"),
+  questionPrompt: document.querySelector("#questionPrompt"),
+  questionClue: document.querySelector("#questionClue"),
+  writtenForm: document.querySelector("#writtenForm"),
+  writtenAnswer: document.querySelector("#writtenAnswer"),
+  choiceGrid: document.querySelector("#choiceGrid"),
+  feedbackBox: document.querySelector("#feedbackBox"),
+  feedbackTitle: document.querySelector("#feedbackTitle"),
+  feedbackDetail: document.querySelector("#feedbackDetail"),
+  skipLearnBtn: document.querySelector("#skipLearnBtn"),
+  nextQuestionBtn: document.querySelector("#nextQuestionBtn")
 };
 
 function init() {
@@ -104,8 +176,10 @@ function init() {
   if (!state.deck.length) {
     state.deck = sampleDeck.map(normalizeCard);
   }
+  hydrateSettingsControls();
   bindEvents();
   refreshAll();
+  nextLearnQuestion();
 }
 
 function bindEvents() {
@@ -116,6 +190,7 @@ function bindEvents() {
     state.isFlipped = false;
     saveState();
     refreshAll();
+    nextLearnQuestion();
   });
 
   els.searchInput.addEventListener("input", (event) => {
@@ -168,16 +243,45 @@ function bindEvents() {
   els.clearProgressBtn.addEventListener("click", clearProgress);
 
   els.tabs.forEach((tab) => {
-    tab.addEventListener("click", () => setView(tab.dataset.view));
+    tab.addEventListener("click", () => {
+      setView(tab.dataset.view);
+      if (tab.dataset.view === "learn" && !state.learn.currentCard) nextLearnQuestion();
+    });
   });
+
+  els.learnModeButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      state.settings.learnMode = button.dataset.learnMode;
+      saveState();
+      syncLearnModeButtons();
+      nextLearnQuestion();
+    });
+  });
+
+  els.hardOnlyToggle.addEventListener("change", (event) => {
+    state.settings.hardOnly = event.target.checked;
+    saveState();
+    nextLearnQuestion();
+  });
+
+  els.dailyGoalInput.addEventListener("change", (event) => {
+    updateDailyGoal(Number(event.target.value));
+  });
+  els.goalDownBtn.addEventListener("click", () => updateDailyGoal(state.settings.dailyGoal - 1));
+  els.goalUpBtn.addEventListener("click", () => updateDailyGoal(state.settings.dailyGoal + 1));
+  els.writtenForm.addEventListener("submit", handleWrittenSubmit);
+  els.skipLearnBtn.addEventListener("click", nextLearnQuestion);
+  els.nextQuestionBtn.addEventListener("click", nextLearnQuestion);
 
   document.addEventListener("keydown", (event) => {
     if (event.target.matches("input, select, textarea")) return;
-    if (event.key === "ArrowRight") nextCard();
-    if (event.key === "ArrowLeft") previousCard();
-    if (event.key.toLowerCase() === "f") flipCard();
-    if (event.key === "1") markCurrentCard("dontKnow");
-    if (event.key === "2") markCurrentCard("known");
+    if (document.querySelector("#study").classList.contains("is-active")) {
+      if (event.key === "ArrowRight") nextCard();
+      if (event.key === "ArrowLeft") previousCard();
+      if (event.key.toLowerCase() === "f") flipCard();
+      if (event.key === "1") markCurrentCard("dontKnow");
+      if (event.key === "2") markCurrentCard("known");
+    }
   });
 }
 
@@ -193,8 +297,10 @@ function handleFileImport(event) {
       state.deck = imported.map(normalizeCard).filter((card) => card.term && card.definition);
       state.currentIndex = 0;
       state.isFlipped = false;
+      state.learn.currentCard = null;
       saveState();
       refreshAll();
+      nextLearnQuestion();
     } catch (error) {
       alert(error.message || "Could not import that CSV.");
     } finally {
@@ -293,6 +399,7 @@ function refreshAll() {
   renderMeter();
   renderLibrary();
   renderDashboard();
+  renderLearnStats();
 }
 
 function populateTierFilter() {
@@ -312,9 +419,10 @@ function populateTierFilter() {
 function applyFilters() {
   const { tier, status, search } = state.filters;
   state.filteredDeck = state.deck.filter((card) => {
-    const progress = state.progress[card.id]?.status || "unknown";
+    const progress = getProgress(card.id);
+    const statusValue = progress.status || "unknown";
     const matchesTier = tier === "all" || card.tier === tier;
-    const matchesStatus = status === "all" || progress === status;
+    const matchesStatus = status === "all" || statusValue === status;
     const searchable = `${card.term} ${card.definition} ${card.example}`.toLowerCase();
     const matchesSearch = !search || searchable.includes(search);
     return matchesTier && matchesStatus && matchesSearch;
@@ -349,7 +457,7 @@ function renderCard() {
 
 function renderMeter() {
   const total = state.filteredDeck.length;
-  const marked = state.filteredDeck.filter((card) => state.progress[card.id]?.status).length;
+  const marked = state.filteredDeck.filter((card) => getProgress(card.id).status).length;
   const percent = total ? Math.round((marked / total) * 100) : 0;
   els.meterLabel.textContent = `${marked} of ${total}`;
   els.meterPercent.textContent = `${percent}%`;
@@ -367,13 +475,13 @@ function renderLibrary() {
   const fragment = document.createDocumentFragment();
   state.filteredDeck.forEach((card) => {
     const item = els.wordItemTemplate.content.firstElementChild.cloneNode(true);
-    const status = state.progress[card.id]?.status || "unknown";
+    const progress = getProgress(card.id);
     item.querySelector("h3").textContent = card.term;
     item.querySelector("p").textContent = card.definition;
     item.querySelector(".tier-pill").textContent = card.tier;
     const statusPill = item.querySelector(".status-pill");
-    statusPill.textContent = statusLabel(status);
-    statusPill.classList.add(status);
+    statusPill.textContent = statusLabel(progress.status || "unknown");
+    statusPill.classList.add(progress.status || "unknown");
     fragment.append(item);
   });
   els.wordList.append(fragment);
@@ -381,14 +489,21 @@ function renderLibrary() {
 
 function renderDashboard() {
   const total = state.deck.length;
-  const known = state.deck.filter((card) => state.progress[card.id]?.status === "known").length;
-  const dontKnow = state.deck.filter((card) => state.progress[card.id]?.status === "dontKnow").length;
+  const known = state.deck.filter((card) => getProgress(card.id).status === "known").length;
+  const dontKnow = state.deck.filter((card) => getProgress(card.id).status === "dontKnow").length;
   const mastery = total ? Math.round((known / total) * 100) : 0;
+  const due = state.deck.filter(isDue).length;
+  const hard = state.deck.filter(isHardCard).length;
+  const today = getTodayReviews();
 
   els.totalWords.textContent = total;
   els.knownWords.textContent = known;
   els.dontKnowWords.textContent = dontKnow;
   els.masteryRate.textContent = `${mastery}%`;
+  els.dueWords.textContent = due;
+  els.todayReviews.textContent = today;
+  els.reviewStreak.textContent = `${getReviewStreak()}`;
+  els.hardWords.textContent = hard;
   renderTierChart();
 }
 
@@ -424,7 +539,7 @@ function renderTierChart() {
 
 function syncAnswerButtons() {
   const card = getCurrentCard();
-  const status = card ? state.progress[card.id]?.status : "";
+  const status = card ? getProgress(card.id).status : "";
   els.knowBtn.classList.toggle("is-selected", status === "known");
   els.dontKnowBtn.classList.toggle("is-selected", status === "dontKnow");
 }
@@ -459,17 +574,341 @@ function markCurrentCard(status) {
   const card = getCurrentCard();
   if (!card) return;
 
-  state.progress[card.id] = {
-    status,
-    updatedAt: new Date().toISOString(),
-    reviews: (state.progress[card.id]?.reviews || 0) + 1
-  };
+  const progress = getProgress(card.id);
+  progress.status = status;
+  progress.updatedAt = new Date().toISOString();
+  progress.reviews = (progress.reviews || 0) + 1;
+  progress.lastReviewedAt = progress.updatedAt;
   saveState();
   syncAnswerButtons();
   renderMeter();
   renderLibrary();
   renderDashboard();
+  renderLearnStats();
   window.setTimeout(nextCard, 180);
+}
+
+function nextLearnQuestion() {
+  const card = selectLearnCard();
+  state.learn.currentCard = card;
+  state.learn.answered = false;
+  state.learn.options = card ? buildChoices(card) : [];
+  renderLearnQuestion();
+}
+
+function selectLearnCard() {
+  const pool = state.deck.filter((card) => !state.settings.hardOnly || isHardCard(card));
+  if (!pool.length) return state.deck[0] || null;
+
+  const currentId = state.learn.currentCard?.id;
+  const sorted = [...pool].sort((a, b) => getPriorityScore(b) - getPriorityScore(a));
+  const weighted = [];
+  sorted.forEach((card, index) => {
+    const weight = Math.max(1, Math.round(getPriorityScore(card)) + (index < 4 ? 2 : 0));
+    for (let count = 0; count < weight; count += 1) weighted.push(card);
+  });
+
+  const candidates = shuffle(weighted).filter((card) => card.id !== currentId);
+  return candidates[0] || sorted[0] || null;
+}
+
+function renderLearnQuestion() {
+  const card = state.learn.currentCard;
+  renderLearnStats();
+  clearFeedback();
+  els.choiceGrid.innerHTML = "";
+  els.writtenAnswer.value = "";
+
+  syncLearnModeButtons();
+  els.hardOnlyToggle.checked = state.settings.hardOnly;
+  els.dailyGoalInput.value = state.settings.dailyGoal;
+
+  if (!card) {
+    els.learnMeta.textContent = "No deck loaded";
+    els.questionTypeLabel.textContent = "Learn";
+    els.questionPrompt.textContent = "Import a CSV to start learning.";
+    els.questionClue.textContent = "The sample deck is also available from the Study screen.";
+    els.writtenForm.style.display = "none";
+    els.choiceGrid.style.display = "none";
+    els.confusingPairText.textContent = "Practice will flag common look-alikes when they appear.";
+    return;
+  }
+
+  const progress = getProgress(card.id);
+  const mode = state.settings.learnMode;
+  const dueText = isDue(card) ? "Due now" : `Due ${formatDue(progress.dueAt)}`;
+  els.learnMeta.textContent = `${card.tier} - ${dueText}`;
+
+  if (mode === "written") {
+    els.questionTypeLabel.textContent = "Written answer";
+    els.questionPrompt.textContent = card.definition;
+    els.questionClue.textContent = "Type the vocabulary word. Case and punctuation do not matter.";
+    els.writtenForm.style.display = "grid";
+    els.choiceGrid.style.display = "none";
+    window.setTimeout(() => els.writtenAnswer.focus(), 0);
+  } else {
+    els.questionTypeLabel.textContent = mode === "sat" ? "SAT-style blank" : "Multiple choice";
+    els.questionPrompt.textContent = mode === "sat" ? makeBlankSentence(card) : "Choose the word that best matches this definition.";
+    els.questionClue.textContent = mode === "sat" ? card.definition : card.definition;
+    els.writtenForm.style.display = "none";
+    els.choiceGrid.style.display = "grid";
+    renderChoices(card);
+  }
+
+  const pair = getConfusingPair(card);
+  els.confusingPairText.textContent = pair
+    ? `${card.term} is commonly confused with ${pair}. Watch the direction of the meaning.`
+    : "No common confusing pair detected for this word.";
+}
+
+function renderChoices(card) {
+  els.choiceGrid.innerHTML = "";
+  state.learn.options.forEach((option) => {
+    const button = document.createElement("button");
+    button.className = "choice-button";
+    button.type = "button";
+    button.textContent = option.term;
+    button.addEventListener("click", () => handleChoiceAnswer(card, option.term, button));
+    els.choiceGrid.append(button);
+  });
+}
+
+function handleWrittenSubmit(event) {
+  event.preventDefault();
+  const card = state.learn.currentCard;
+  if (!card || state.learn.answered) return;
+
+  const answer = els.writtenAnswer.value;
+  const isCorrect = isAnswerCorrect(answer, card.term);
+  recordLearnAnswer(card, isCorrect);
+  showFeedback(isCorrect, card, answer);
+}
+
+function handleChoiceAnswer(card, selectedTerm, selectedButton) {
+  if (state.learn.answered) return;
+  const isCorrect = normalizeAnswer(selectedTerm) === normalizeAnswer(card.term);
+  recordLearnAnswer(card, isCorrect);
+
+  els.choiceGrid.querySelectorAll(".choice-button").forEach((button) => {
+    const buttonIsCorrect = normalizeAnswer(button.textContent) === normalizeAnswer(card.term);
+    button.disabled = true;
+    if (buttonIsCorrect) button.classList.add("correct");
+  });
+  if (!isCorrect) selectedButton.classList.add("incorrect");
+  showFeedback(isCorrect, card, selectedTerm);
+}
+
+function recordLearnAnswer(card, isCorrect) {
+  const progress = getProgress(card.id);
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const previousInterval = Number(progress.intervalDays || 0);
+  const previousEase = Number(progress.ease || 2.3);
+
+  progress.reviews = (progress.reviews || 0) + 1;
+  progress.learnReviews = (progress.learnReviews || 0) + 1;
+  progress.correct = (progress.correct || 0) + (isCorrect ? 1 : 0);
+  progress.incorrect = (progress.incorrect || 0) + (isCorrect ? 0 : 1);
+  progress.lastAnswerCorrect = isCorrect;
+  progress.lastReviewedAt = nowIso;
+  progress.updatedAt = nowIso;
+  progress.status = isCorrect ? "known" : "dontKnow";
+
+  if (isCorrect) {
+    const nextInterval = previousInterval < 1 ? 1 : Math.ceil(previousInterval * previousEase);
+    progress.intervalDays = Math.min(nextInterval, 120);
+    progress.ease = Math.min(previousEase + 0.12, 3);
+    progress.dueAt = new Date(now.getTime() + progress.intervalDays * DAY_MS).toISOString();
+  } else {
+    progress.intervalDays = 0;
+    progress.ease = Math.max(previousEase - 0.22, 1.3);
+    progress.dueAt = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
+  }
+
+  recordActivity(now);
+  state.learn.answered = true;
+  saveState();
+  refreshAll();
+}
+
+function showFeedback(isCorrect, card, submittedAnswer) {
+  els.feedbackBox.hidden = false;
+  els.feedbackBox.classList.toggle("correct", isCorrect);
+  els.feedbackBox.classList.toggle("incorrect", !isCorrect);
+  els.feedbackTitle.textContent = isCorrect ? "Correct" : "Not quite";
+  els.feedbackDetail.textContent = isCorrect
+    ? `${card.term}: ${card.definition}`
+    : `You answered "${String(submittedAnswer || "").trim() || "blank"}". Correct answer: ${card.term}. ${card.definition}`;
+}
+
+function clearFeedback() {
+  els.feedbackBox.hidden = true;
+  els.feedbackBox.classList.remove("correct", "incorrect");
+  els.feedbackTitle.textContent = "";
+  els.feedbackDetail.textContent = "";
+}
+
+function buildChoices(card) {
+  const byId = new Map();
+  byId.set(card.id, card);
+
+  const confusingTerm = getConfusingPair(card);
+  if (confusingTerm) {
+    const confusingCard = state.deck.find((candidate) => normalizeAnswer(candidate.term) === normalizeAnswer(confusingTerm));
+    if (confusingCard) byId.set(confusingCard.id, confusingCard);
+  }
+
+  const scored = state.deck
+    .filter((candidate) => candidate.id !== card.id)
+    .map((candidate) => ({
+      card: candidate,
+      score: getDistractorScore(card, candidate)
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  scored.forEach(({ card: candidate }) => {
+    if (byId.size < 4) byId.set(candidate.id, candidate);
+  });
+
+  return shuffle([...byId.values()]).slice(0, Math.min(4, state.deck.length));
+}
+
+function getDistractorScore(card, candidate) {
+  let score = 0;
+  if (card.tier === candidate.tier) score += 5;
+  score += Math.max(0, 6 - Math.abs(card.term.length - candidate.term.length));
+  score += sharedPrefixLength(card.term, candidate.term);
+  score += sharedLetters(card.term, candidate.term) / 3;
+  if (getConfusingPair(card) && normalizeAnswer(getConfusingPair(card)) === normalizeAnswer(candidate.term)) score += 20;
+  return score;
+}
+
+function makeBlankSentence(card) {
+  if (card.example && includesTerm(card.example, card.term)) {
+    return card.example.replace(new RegExp(`\\b${escapeRegExp(card.term)}\\b`, "i"), "_____");
+  }
+  if (card.example) {
+    return `${card.example} Which word best captures this idea?`;
+  }
+  return `The most precise word for "${card.definition}" is _____.`;
+}
+
+function includesTerm(sentence, term) {
+  return new RegExp(`\\b${escapeRegExp(term)}\\b`, "i").test(sentence);
+}
+
+function isAnswerCorrect(answer, correctTerm) {
+  const normalizedAnswer = normalizeAnswer(answer);
+  const normalizedTerm = normalizeAnswer(correctTerm);
+  if (!normalizedAnswer) return false;
+  if (normalizedAnswer === normalizedTerm) return true;
+  return normalizedTerm.length >= 6 && levenshtein(normalizedAnswer, normalizedTerm) <= 1;
+}
+
+function normalizeAnswer(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getProgress(cardId) {
+  if (!state.progress[cardId]) {
+    state.progress[cardId] = {
+      status: "unknown",
+      reviews: 0,
+      learnReviews: 0,
+      correct: 0,
+      incorrect: 0,
+      intervalDays: 0,
+      ease: 2.3,
+      dueAt: null,
+      updatedAt: null
+    };
+  }
+  return state.progress[cardId];
+}
+
+function isDue(card) {
+  const progress = getProgress(card.id);
+  return !progress.dueAt || new Date(progress.dueAt).getTime() <= Date.now();
+}
+
+function isHardCard(card) {
+  const progress = getProgress(card.id);
+  const attempts = (progress.correct || 0) + (progress.incorrect || 0);
+  const accuracy = attempts ? progress.correct / attempts : 0;
+  return progress.status === "dontKnow" || progress.incorrect > progress.correct || (attempts > 0 && accuracy < 0.7) || isDue(card);
+}
+
+function getPriorityScore(card) {
+  const progress = getProgress(card.id);
+  const dueBoost = isDue(card) ? 5 : 0;
+  const weakBoost = (progress.incorrect || 0) * 3 - (progress.correct || 0);
+  const statusBoost = progress.status === "dontKnow" ? 4 : progress.status === "known" ? 0 : 2;
+  const hardBoost = isHardCard(card) ? 2 : 0;
+  return Math.max(1, dueBoost + weakBoost + statusBoost + hardBoost);
+}
+
+function getConfusingPair(card) {
+  const term = normalizeAnswer(card.term);
+  const pair = confusingPairs.find(([first, second]) => first === term || second === term);
+  if (!pair) return "";
+  return pair[0] === term ? titleCase(pair[1]) : titleCase(pair[0]);
+}
+
+function recordActivity(date) {
+  const key = dayKey(date);
+  if (!state.progress.__activity) state.progress.__activity = {};
+  state.progress.__activity[key] = (state.progress.__activity[key] || 0) + 1;
+}
+
+function getTodayReviews() {
+  return state.progress.__activity?.[dayKey(new Date())] || 0;
+}
+
+function getReviewStreak() {
+  const activity = state.progress.__activity || {};
+  let streak = 0;
+  let cursor = startOfDay(new Date());
+
+  while ((activity[dayKey(cursor)] || 0) > 0) {
+    streak += 1;
+    cursor = new Date(cursor.getTime() - DAY_MS);
+  }
+
+  return streak;
+}
+
+function renderLearnStats() {
+  const today = getTodayReviews();
+  const goal = state.settings.dailyGoal;
+  const percent = Math.min(100, Math.round((today / goal) * 100));
+  const due = state.deck.filter(isDue).length;
+  els.todayGoalLabel.textContent = `${today} / ${goal}`;
+  els.todayGoalBar.style.width = `${percent}%`;
+  els.learnDueCount.textContent = `${due} due`;
+}
+
+function hydrateSettingsControls() {
+  els.dailyGoalInput.value = state.settings.dailyGoal;
+  els.hardOnlyToggle.checked = state.settings.hardOnly;
+  syncLearnModeButtons();
+}
+
+function syncLearnModeButtons() {
+  els.learnModeButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.learnMode === state.settings.learnMode);
+  });
+}
+
+function updateDailyGoal(value) {
+  state.settings.dailyGoal = Math.max(1, Math.min(200, Number.isFinite(value) ? Math.round(value) : 20));
+  els.dailyGoalInput.value = state.settings.dailyGoal;
+  saveState();
+  renderLearnStats();
+  renderDashboard();
 }
 
 function setView(viewId) {
@@ -482,16 +921,32 @@ function setView(viewId) {
 }
 
 function clearProgress() {
-  if (!confirm("Reset all saved Know / Don't Know marks?")) return;
+  if (!confirm("Reset all saved study progress, streaks, and spaced repetition data?")) return;
   state.progress = {};
   saveState();
   refreshAll();
+  nextLearnQuestion();
 }
 
 function exportProgress() {
-  const rows = [["term", "definition", "tier", "example", "status", "reviews", "updatedAt"]];
+  const rows = [[
+    "term",
+    "definition",
+    "tier",
+    "example",
+    "status",
+    "reviews",
+    "learnReviews",
+    "correct",
+    "incorrect",
+    "intervalDays",
+    "ease",
+    "dueAt",
+    "updatedAt"
+  ]];
+
   state.deck.forEach((card) => {
-    const progress = state.progress[card.id] || {};
+    const progress = getProgress(card.id);
     rows.push([
       card.term,
       card.definition,
@@ -499,6 +954,12 @@ function exportProgress() {
       card.example,
       progress.status || "",
       progress.reviews || 0,
+      progress.learnReviews || 0,
+      progress.correct || 0,
+      progress.incorrect || 0,
+      progress.intervalDays || 0,
+      progress.ease || "",
+      progress.dueAt || "",
       progress.updatedAt || ""
     ]);
   });
@@ -518,20 +979,33 @@ function saveState() {
     STORAGE_KEY,
     JSON.stringify({
       deck: state.deck,
-      progress: state.progress
+      progress: state.progress,
+      settings: state.settings
     })
   );
 }
 
 function loadState() {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") || migrateOldState();
     state.deck = Array.isArray(saved.deck) ? saved.deck.map(normalizeCard) : [];
     state.progress = saved.progress || {};
+    state.settings = { ...defaultSettings, ...(saved.settings || {}) };
   } catch {
     state.deck = [];
     state.progress = {};
+    state.settings = { ...defaultSettings };
   }
+}
+
+function migrateOldState() {
+  const old = JSON.parse(localStorage.getItem(OLD_STORAGE_KEY) || "{}");
+  if (!old.deck && !old.progress) return {};
+  return {
+    deck: old.deck || [],
+    progress: old.progress || {},
+    settings: { ...defaultSettings }
+  };
 }
 
 function shuffle(cards) {
@@ -561,6 +1035,72 @@ function escapeHtml(value) {
   const div = document.createElement("div");
   div.textContent = value;
   return div.innerHTML;
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function sharedPrefixLength(first, second) {
+  const a = normalizeAnswer(first);
+  const b = normalizeAnswer(second);
+  let count = 0;
+  while (count < a.length && count < b.length && a[count] === b[count]) count += 1;
+  return count;
+}
+
+function sharedLetters(first, second) {
+  const a = new Set(normalizeAnswer(first).replace(/\s/g, ""));
+  const b = new Set(normalizeAnswer(second).replace(/\s/g, ""));
+  return [...a].filter((letter) => b.has(letter)).length;
+}
+
+function levenshtein(first, second) {
+  const a = normalizeAnswer(first);
+  const b = normalizeAnswer(second);
+  const matrix = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0));
+
+  for (let index = 0; index <= a.length; index += 1) matrix[index][0] = index;
+  for (let index = 0; index <= b.length; index += 1) matrix[0][index] = index;
+
+  for (let row = 1; row <= a.length; row += 1) {
+    for (let column = 1; column <= b.length; column += 1) {
+      const cost = a[row - 1] === b[column - 1] ? 0 : 1;
+      matrix[row][column] = Math.min(
+        matrix[row - 1][column] + 1,
+        matrix[row][column - 1] + 1,
+        matrix[row - 1][column - 1] + cost
+      );
+    }
+  }
+
+  return matrix[a.length][b.length];
+}
+
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function dayKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatDue(dueAt) {
+  if (!dueAt) return "now";
+  const diff = new Date(dueAt).getTime() - Date.now();
+  if (diff <= 0) return "now";
+  const minutes = Math.ceil(diff / 60000);
+  if (minutes < 60) return `in ${minutes} min`;
+  const hours = Math.ceil(minutes / 60);
+  if (hours < 24) return `in ${hours} hr`;
+  return `in ${Math.ceil(hours / 24)} days`;
+}
+
+function titleCase(value) {
+  return String(value).replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
 
 init();
