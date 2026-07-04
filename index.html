@@ -19,12 +19,19 @@
           </span>
         </a>
 
-        <nav class="tabs" aria-label="Primary">
-          <button class="tab is-active" type="button" data-view="study">Study</button>
-          <button class="tab" type="button" data-view="learn">Learn</button>
-          <button class="tab" type="button" data-view="library">Library</button>
-          <button class="tab" type="button" data-view="dashboard">Dashboard</button>
-        </nav>
+        <div class="topbar-actions">
+          <nav class="tabs" aria-label="Primary">
+            <button class="tab is-active" type="button" data-view="study">Study</button>
+            <button class="tab" type="button" data-view="learn">Learn</button>
+            <button class="tab" type="button" data-view="library">Library</button>
+            <button class="tab" type="button" data-view="dashboard">Dashboard</button>
+          </nav>
+
+          <button class="theme-toggle" type="button" id="themeToggle" aria-pressed="true">
+            <span class="theme-toggle-icon" aria-hidden="true"></span>
+            <span id="themeToggleText">Dark</span>
+          </button>
+        </div>
       </header>
 
       <main>
@@ -65,9 +72,12 @@
                   <span class="field-label">Status</span>
                   <select id="statusFilter">
                     <option value="all">All words</option>
-                    <option value="unknown">Not marked</option>
-                    <option value="known">Know</option>
-                    <option value="dontKnow">Don't know</option>
+                    <option value="unranked">Unranked</option>
+                    <option value="m1">Mastery 1</option>
+                    <option value="m2">Mastery 2</option>
+                    <option value="m3">Mastery 3</option>
+                    <option value="m4">Mastery 4</option>
+                    <option value="m5">Mastery 5</option>
                   </select>
                 </label>
               </div>
@@ -119,13 +129,16 @@
               </article>
 
               <div class="answer-actions">
-                <button class="answer-button dont" type="button" id="dontKnowBtn">
+                <button class="answer-button m1" type="button" data-mastery-action="1">
                   <span aria-hidden="true">!</span>
-                  Don't know
+                  1 Still new
                 </button>
-                <button class="answer-button know" type="button" id="knowBtn">
+                <button class="answer-button m2" type="button" data-mastery-action="2">2 Shaky</button>
+                <button class="answer-button m3" type="button" data-mastery-action="3">3 Familiar</button>
+                <button class="answer-button m4" type="button" data-mastery-action="4">4 Strong</button>
+                <button class="answer-button m5" type="button" data-mastery-action="5">
                   <span aria-hidden="true">&#10003;</span>
-                  Know
+                  5 Mastered
                 </button>
               </div>
 
@@ -284,15 +297,15 @@
               <strong id="totalWords">0</strong>
             </div>
             <div class="stat-card">
-              <span>Know</span>
+              <span>Mastered</span>
               <strong id="knownWords">0</strong>
             </div>
             <div class="stat-card">
-              <span>Don't know</span>
-              <strong id="dontKnowWords">0</strong>
+              <span>Low mastery</span>
+              <strong id="lowMasteryWords">0</strong>
             </div>
             <div class="stat-card">
-              <span>Mastery</span>
+              <span>Avg mastery</span>
               <strong id="masteryRate">0%</strong>
             </div>
             <div class="stat-card">
@@ -344,8 +357,11 @@
         </div>
         <span class="status-pill"></span>
         <div class="word-actions">
-          <button type="button" data-card-action="dontKnow">Don't know</button>
-          <button type="button" data-card-action="known">Know</button>
+          <button type="button" data-card-mastery="1">1</button>
+          <button type="button" data-card-mastery="2">2</button>
+          <button type="button" data-card-mastery="3">3</button>
+          <button type="button" data-card-mastery="4">4</button>
+          <button type="button" data-card-mastery="5">5</button>
         </div>
       </article>
     </template>

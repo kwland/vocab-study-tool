@@ -1,6 +1,7 @@
 const STORAGE_KEY = "vocabDeck.v2";
 const OLD_STORAGE_KEY = "vocabDeck.v1";
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MASTERY_MAX = 5;
 
 const sampleDeck = [
   {
@@ -92,7 +93,8 @@ const defaultSettings = {
   hardOnly: false,
   answerSide: "term",
   sessionSize: 20,
-  sessionIds: []
+  sessionIds: [],
+  theme: "dark"
 };
 
 const state = {
@@ -123,14 +125,15 @@ const els = {
   statusFilter: document.querySelector("#statusFilter"),
   shuffleBtn: document.querySelector("#shuffleBtn"),
   resetFiltersBtn: document.querySelector("#resetFiltersBtn"),
+  themeToggle: document.querySelector("#themeToggle"),
+  themeToggleText: document.querySelector("#themeToggleText"),
   flashcard: document.querySelector("#flashcard"),
   cardTerm: document.querySelector("#cardTerm"),
   cardDefinition: document.querySelector("#cardDefinition"),
   cardExample: document.querySelector("#cardExample"),
   currentTier: document.querySelector("#currentTier"),
   cardCounter: document.querySelector("#cardCounter"),
-  knowBtn: document.querySelector("#knowBtn"),
-  dontKnowBtn: document.querySelector("#dontKnowBtn"),
+  masteryActionButtons: document.querySelectorAll("[data-mastery-action]"),
   prevBtn: document.querySelector("#prevBtn"),
   nextBtn: document.querySelector("#nextBtn"),
   flipBtn: document.querySelector("#flipBtn"),
@@ -142,7 +145,7 @@ const els = {
   clearProgressBtn: document.querySelector("#clearProgressBtn"),
   totalWords: document.querySelector("#totalWords"),
   knownWords: document.querySelector("#knownWords"),
-  dontKnowWords: document.querySelector("#dontKnowWords"),
+  lowMasteryWords: document.querySelector("#lowMasteryWords"),
   masteryRate: document.querySelector("#masteryRate"),
   dueWords: document.querySelector("#dueWords"),
   todayReviews: document.querySelector("#todayReviews"),
@@ -186,6 +189,7 @@ const els = {
 
 function init() {
   loadState();
+  applyTheme();
   if (!state.deck.length) {
     state.deck = sampleDeck.map(normalizeCard);
   }
@@ -241,6 +245,12 @@ function bindEvents() {
     refreshAll();
   });
 
+  els.themeToggle.addEventListener("click", () => {
+    state.settings.theme = state.settings.theme === "dark" ? "light" : "dark";
+    applyTheme();
+    saveState();
+  });
+
   els.flashcard.addEventListener("click", flipCard);
   els.flashcard.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -251,8 +261,9 @@ function bindEvents() {
   els.flipBtn.addEventListener("click", flipCard);
   els.prevBtn.addEventListener("click", previousCard);
   els.nextBtn.addEventListener("click", nextCard);
-  els.knowBtn.addEventListener("click", () => markCurrentCard("known"));
-  els.dontKnowBtn.addEventListener("click", () => markCurrentCard("dontKnow"));
+  els.masteryActionButtons.forEach((button) => {
+    button.addEventListener("click", () => markCurrentCard(Number(button.dataset.masteryAction)));
+  });
   els.exportBtn.addEventListener("click", exportProgress);
   els.clearProgressBtn.addEventListener("click", clearProgress);
 
@@ -311,8 +322,7 @@ function bindEvents() {
       if (event.key === "ArrowRight") nextCard();
       if (event.key === "ArrowLeft") previousCard();
       if (event.key.toLowerCase() === "f") flipCard();
-      if (event.key === "1") markCurrentCard("dontKnow");
-      if (event.key === "2") markCurrentCard("known");
+      if (["1", "2", "3", "4", "5"].includes(event.key)) markCurrentCard(Number(event.key));
     }
   });
 }
@@ -453,9 +463,9 @@ function applyFilters() {
   const { tier, status, search } = state.filters;
   state.filteredDeck = state.deck.filter((card) => {
     const progress = getProgress(card.id);
-    const statusValue = progress.status || "unknown";
+    const mastery = getMastery(progress);
     const matchesTier = tier === "all" || card.tier === tier;
-    const matchesStatus = status === "all" || statusValue === status;
+    const matchesStatus = status === "all" || (status === "unranked" ? mastery === 0 : mastery === Number(status.slice(1)));
     const searchable = `${card.term} ${card.definition} ${card.example}`.toLowerCase();
     const matchesSearch = !search || searchable.includes(search);
     return matchesTier && matchesStatus && matchesSearch;
@@ -490,7 +500,7 @@ function renderCard() {
 
 function renderMeter() {
   const total = state.filteredDeck.length;
-  const marked = state.filteredDeck.filter((card) => getProgress(card.id).status).length;
+  const marked = state.filteredDeck.filter((card) => getMastery(getProgress(card.id)) > 0).length;
   const percent = total ? Math.round((marked / total) * 100) : 0;
   els.meterLabel.textContent = `${marked} of ${total}`;
   els.meterPercent.textContent = `${percent}%`;
@@ -509,15 +519,18 @@ function renderLibrary() {
   state.filteredDeck.forEach((card) => {
     const item = els.wordItemTemplate.content.firstElementChild.cloneNode(true);
     const progress = getProgress(card.id);
+    const mastery = getMastery(progress);
     item.dataset.cardId = card.id;
     item.querySelector("h3").textContent = card.term;
     item.querySelector("p").textContent = card.definition;
     item.querySelector(".tier-pill").textContent = card.tier;
     const statusPill = item.querySelector(".status-pill");
-    statusPill.textContent = statusLabel(progress.status || "unknown");
-    statusPill.classList.add(progress.status || "unknown");
-    item.querySelectorAll("[data-card-action]").forEach((button) => {
-      button.addEventListener("click", () => markSpecificCard(card.id, button.dataset.cardAction));
+    statusPill.textContent = masteryLabel(mastery);
+    statusPill.classList.add(masteryClass(mastery));
+    item.querySelectorAll("[data-card-mastery]").forEach((button) => {
+      const buttonMastery = Number(button.dataset.cardMastery);
+      button.classList.toggle("is-selected", buttonMastery === mastery);
+      button.addEventListener("click", () => markSpecificCard(card.id, buttonMastery));
     });
     fragment.append(item);
   });
@@ -526,17 +539,19 @@ function renderLibrary() {
 
 function renderDashboard() {
   const total = state.deck.length;
-  const known = state.deck.filter((card) => getProgress(card.id).status === "known").length;
-  const dontKnow = state.deck.filter((card) => getProgress(card.id).status === "dontKnow").length;
-  const mastery = total ? Math.round((known / total) * 100) : 0;
+  const masteryValues = state.deck.map((card) => getMastery(getProgress(card.id)));
+  const known = masteryValues.filter((mastery) => mastery === MASTERY_MAX).length;
+  const lowMastery = masteryValues.filter((mastery) => mastery > 0 && mastery <= 2).length;
+  const ranked = masteryValues.filter((mastery) => mastery > 0);
+  const mastery = ranked.length ? (ranked.reduce((sum, value) => sum + value, 0) / ranked.length).toFixed(1) : "0.0";
   const due = state.deck.filter(isDue).length;
   const hard = state.deck.filter(isHardCard).length;
   const today = getTodayReviews();
 
   els.totalWords.textContent = total;
   els.knownWords.textContent = known;
-  els.dontKnowWords.textContent = dontKnow;
-  els.masteryRate.textContent = `${mastery}%`;
+  els.lowMasteryWords.textContent = lowMastery;
+  els.masteryRate.textContent = `${mastery}/5`;
   els.dueWords.textContent = due;
   els.todayReviews.textContent = today;
   els.reviewStreak.textContent = `${getReviewStreak()}`;
@@ -576,9 +591,10 @@ function renderTierChart() {
 
 function syncAnswerButtons() {
   const card = getCurrentCard();
-  const status = card ? getProgress(card.id).status : "";
-  els.knowBtn.classList.toggle("is-selected", status === "known");
-  els.dontKnowBtn.classList.toggle("is-selected", status === "dontKnow");
+  const mastery = card ? getMastery(getProgress(card.id)) : 0;
+  els.masteryActionButtons.forEach((button) => {
+    button.classList.toggle("is-selected", Number(button.dataset.masteryAction) === mastery);
+  });
 }
 
 function getCurrentCard() {
@@ -607,22 +623,22 @@ function previousCard() {
   renderMeter();
 }
 
-function markCurrentCard(status) {
+function markCurrentCard(mastery) {
   const card = getCurrentCard();
   if (!card) return;
 
-  markCardStatus(card.id, status, true);
+  markCardMastery(card.id, mastery, true);
   window.setTimeout(nextCard, 180);
 }
 
-function markSpecificCard(cardId, status) {
-  markCardStatus(cardId, status, false);
+function markSpecificCard(cardId, mastery) {
+  markCardMastery(cardId, mastery, false);
   if (state.learn.currentCard?.id === cardId) renderLearnQuestion();
 }
 
-function markCardStatus(cardId, status, countReview) {
+function markCardMastery(cardId, mastery, countReview) {
   const progress = getProgress(cardId);
-  progress.status = status;
+  setProgressMastery(progress, mastery);
   progress.updatedAt = new Date().toISOString();
   progress.lastReviewedAt = progress.updatedAt;
   if (countReview) progress.reviews = (progress.reviews || 0) + 1;
@@ -800,13 +816,14 @@ function applyAnswerResult(progress, isCorrect, now) {
   const nowIso = now.toISOString();
   const previousInterval = Number(progress.intervalDays || 0);
   const previousEase = Number(progress.ease || 2.3);
+  const currentMastery = getMastery(progress);
 
   progress.correct = (progress.correct || 0) + (isCorrect ? 1 : 0);
   progress.incorrect = (progress.incorrect || 0) + (isCorrect ? 0 : 1);
   progress.lastAnswerCorrect = isCorrect;
   progress.lastReviewedAt = nowIso;
   progress.updatedAt = nowIso;
-  progress.status = isCorrect ? "known" : "dontKnow";
+  setProgressMastery(progress, isCorrect ? Math.min(MASTERY_MAX, Math.max(3, currentMastery + 1)) : Math.max(1, currentMastery - 1 || 1));
 
   if (isCorrect) {
     const nextInterval = previousInterval < 1 ? 1 : Math.ceil(previousInterval * previousEase);
@@ -838,6 +855,13 @@ function overrideLastAnswer(isCorrect) {
 
   const progress = getProgress(card.id);
   const previous = progress.lastAnswerCorrect;
+  if (previous === isCorrect) {
+    state.learn.answered = true;
+    state.learn.lastAnsweredCard = { id: card.id, originalCorrect: isCorrect, countedCorrect: isCorrect };
+    showFeedback(isCorrect, card, "manual override");
+    playAnswerAnimation(isCorrect);
+    return;
+  }
   if (previous === true) progress.correct = Math.max(0, (progress.correct || 0) - 1);
   if (previous === false) progress.incorrect = Math.max(0, (progress.incorrect || 0) - 1);
   const now = new Date();
@@ -984,10 +1008,48 @@ function normalizeAnswer(value) {
     .trim();
 }
 
+function getMastery(progress) {
+  if (Number.isFinite(Number(progress.mastery))) {
+    return Math.max(0, Math.min(MASTERY_MAX, Math.round(Number(progress.mastery))));
+  }
+  if (progress.status === "known") return MASTERY_MAX;
+  if (progress.status === "dontKnow") return 1;
+  return 0;
+}
+
+function setProgressMastery(progress, mastery) {
+  const normalized = Math.max(1, Math.min(MASTERY_MAX, Math.round(Number(mastery) || 1)));
+  progress.mastery = normalized;
+  if (normalized >= 4) {
+    progress.status = "known";
+  } else if (normalized <= 2) {
+    progress.status = "dontKnow";
+  } else {
+    progress.status = "learning";
+  }
+}
+
+function masteryLabel(mastery) {
+  if (!mastery) return "Unranked";
+  const labels = {
+    1: "1 - New",
+    2: "2 - Shaky",
+    3: "3 - Familiar",
+    4: "4 - Strong",
+    5: "5 - Mastered"
+  };
+  return labels[mastery] || `Mastery ${mastery}`;
+}
+
+function masteryClass(mastery) {
+  return mastery ? `m${mastery}` : "unknown";
+}
+
 function getProgress(cardId) {
   if (!state.progress[cardId]) {
     state.progress[cardId] = {
       status: "unknown",
+      mastery: 0,
       reviews: 0,
       learnReviews: 0,
       correct: 0,
@@ -1010,14 +1072,16 @@ function isHardCard(card) {
   const progress = getProgress(card.id);
   const attempts = (progress.correct || 0) + (progress.incorrect || 0);
   const accuracy = attempts ? progress.correct / attempts : 0;
-  return progress.status === "dontKnow" || progress.incorrect > progress.correct || (attempts > 0 && accuracy < 0.7) || isDue(card);
+  const mastery = getMastery(progress);
+  return mastery <= 2 || progress.incorrect > progress.correct || (attempts > 0 && accuracy < 0.7) || isDue(card);
 }
 
 function getPriorityScore(card) {
   const progress = getProgress(card.id);
+  const mastery = getMastery(progress);
   const dueBoost = isDue(card) ? 5 : 0;
   const weakBoost = (progress.incorrect || 0) * 3 - (progress.correct || 0);
-  const statusBoost = progress.status === "dontKnow" ? 4 : progress.status === "known" ? 0 : 2;
+  const statusBoost = mastery ? MASTERY_MAX - mastery : 3;
   const hardBoost = isHardCard(card) ? 2 : 0;
   return Math.max(1, dueBoost + weakBoost + statusBoost + hardBoost);
 }
@@ -1085,6 +1149,14 @@ function syncAnswerSideButtons() {
   });
 }
 
+function applyTheme() {
+  const theme = state.settings.theme === "light" ? "light" : "dark";
+  state.settings.theme = theme;
+  document.documentElement.dataset.theme = theme;
+  els.themeToggle.setAttribute("aria-pressed", String(theme === "dark"));
+  els.themeToggleText.textContent = theme === "dark" ? "Dark" : "Light";
+}
+
 function updateSessionSize(value) {
   state.settings.sessionSize = Math.max(1, Math.min(200, Number.isFinite(value) ? Math.round(value) : 20));
   els.sessionSizeInput.value = state.settings.sessionSize;
@@ -1140,6 +1212,7 @@ function exportProgress() {
     "tier",
     "example",
     "status",
+    "mastery",
     "reviews",
     "learnReviews",
     "correct",
@@ -1158,6 +1231,7 @@ function exportProgress() {
       card.tier,
       card.example,
       progress.status || "",
+      getMastery(progress),
       progress.reviews || 0,
       progress.learnReviews || 0,
       progress.correct || 0,
@@ -1221,12 +1295,6 @@ function shuffle(cards) {
     [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
   }
   return copy;
-}
-
-function statusLabel(status) {
-  if (status === "known") return "Know";
-  if (status === "dontKnow") return "Don't know";
-  return "Not marked";
 }
 
 function csvEscape(value) {
