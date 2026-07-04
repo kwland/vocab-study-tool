@@ -784,14 +784,16 @@ function recordLearnAnswer(card, isCorrect) {
   progress.reviews = (progress.reviews || 0) + 1;
   progress.learnReviews = (progress.learnReviews || 0) + 1;
   applyAnswerResult(progress, isCorrect, now);
-  recordActivity(now);
+  if (isCorrect) adjustActivity(now, 1);
   state.learn.answered = true;
   state.learn.lastAnsweredCard = {
     id: card.id,
-    originalCorrect: isCorrect
+    originalCorrect: isCorrect,
+    countedCorrect: isCorrect
   };
   saveState();
   refreshAll();
+  playAnswerAnimation(isCorrect);
 }
 
 function applyAnswerResult(progress, isCorrect, now) {
@@ -838,12 +840,17 @@ function overrideLastAnswer(isCorrect) {
   const previous = progress.lastAnswerCorrect;
   if (previous === true) progress.correct = Math.max(0, (progress.correct || 0) - 1);
   if (previous === false) progress.incorrect = Math.max(0, (progress.incorrect || 0) - 1);
-  applyAnswerResult(progress, isCorrect, new Date());
+  const now = new Date();
+  applyAnswerResult(progress, isCorrect, now);
+  if (previous !== isCorrect) {
+    adjustActivity(now, isCorrect ? 1 : -1);
+  }
   state.learn.answered = true;
-  state.learn.lastAnsweredCard = { id: card.id, originalCorrect: isCorrect };
+  state.learn.lastAnsweredCard = { id: card.id, originalCorrect: isCorrect, countedCorrect: isCorrect };
   saveState();
   refreshAll();
   showFeedback(isCorrect, card, "manual override");
+  playAnswerAnimation(isCorrect);
 }
 
 function clearFeedback() {
@@ -851,6 +858,29 @@ function clearFeedback() {
   els.feedbackBox.classList.remove("correct", "incorrect");
   els.feedbackTitle.textContent = "";
   els.feedbackDetail.textContent = "";
+}
+
+function playAnswerAnimation(isCorrect) {
+  const card = document.querySelector(".question-card");
+  if (!card) return;
+
+  card.classList.remove("answer-correct", "answer-incorrect");
+  void card.offsetWidth;
+  card.classList.add(isCorrect ? "answer-correct" : "answer-incorrect");
+
+  if (!isCorrect || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  const burst = document.createElement("div");
+  burst.className = "success-burst";
+  for (let index = 0; index < 14; index += 1) {
+    const particle = document.createElement("span");
+    particle.style.setProperty("--angle", `${(360 / 14) * index}deg`);
+    particle.style.setProperty("--distance", `${58 + (index % 4) * 12}px`);
+    particle.style.setProperty("--delay", `${index * 14}ms`);
+    burst.append(particle);
+  }
+  card.append(burst);
+  window.setTimeout(() => burst.remove(), 900);
 }
 
 function buildChoices(card) {
@@ -999,10 +1029,11 @@ function getConfusingPair(card) {
   return pair[0] === term ? titleCase(pair[1]) : titleCase(pair[0]);
 }
 
-function recordActivity(date) {
+function adjustActivity(date, delta) {
   const key = dayKey(date);
   if (!state.progress.__activity) state.progress.__activity = {};
-  state.progress.__activity[key] = (state.progress.__activity[key] || 0) + 1;
+  state.progress.__activity[key] = Math.max(0, (state.progress.__activity[key] || 0) + delta);
+  if (state.progress.__activity[key] === 0) delete state.progress.__activity[key];
 }
 
 function getTodayReviews() {
