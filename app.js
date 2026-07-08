@@ -113,7 +113,8 @@ const state = {
     currentCard: null,
     options: [],
     answered: false,
-    lastAnsweredCard: null
+    lastAnsweredCard: null,
+    isActive: false
   }
 };
 
@@ -155,6 +156,11 @@ const els = {
   wordItemTemplate: document.querySelector("#wordItemTemplate"),
   tabs: document.querySelectorAll(".tab"),
   views: document.querySelectorAll(".view"),
+  learnSetup: document.querySelector("#learnSetup"),
+  learnStage: document.querySelector("#learnStage"),
+  learnDeckCount: document.querySelector("#learnDeckCount"),
+  learnDueSetupCount: document.querySelector("#learnDueSetupCount"),
+  learnHardSetupCount: document.querySelector("#learnHardSetupCount"),
   learnModeButtons: document.querySelectorAll("[data-learn-mode]"),
   answerSideButtons: document.querySelectorAll("[data-answer-side]"),
   hardOnlyToggle: document.querySelector("#hardOnlyToggle"),
@@ -183,6 +189,7 @@ const els = {
   feedbackDetail: document.querySelector("#feedbackDetail"),
   overrideIncorrectBtn: document.querySelector("#overrideIncorrectBtn"),
   overrideCorrectBtn: document.querySelector("#overrideCorrectBtn"),
+  backToLearnSetupBtn: document.querySelector("#backToLearnSetupBtn"),
   skipLearnBtn: document.querySelector("#skipLearnBtn"),
   nextQuestionBtn: document.querySelector("#nextQuestionBtn")
 };
@@ -196,7 +203,7 @@ function init() {
   hydrateSettingsControls();
   bindEvents();
   refreshAll();
-  nextLearnQuestion();
+  renderLearnShell();
 }
 
 function bindEvents() {
@@ -206,9 +213,9 @@ function bindEvents() {
     state.settings.sessionIds = [];
     state.currentIndex = 0;
     state.isFlipped = false;
+    state.learn.isActive = false;
     saveState();
     refreshAll();
-    nextLearnQuestion();
   });
 
   els.searchInput.addEventListener("input", (event) => {
@@ -270,7 +277,7 @@ function bindEvents() {
   els.tabs.forEach((tab) => {
     tab.addEventListener("click", () => {
       setView(tab.dataset.view);
-      if (tab.dataset.view === "learn" && !state.learn.currentCard) nextLearnQuestion();
+      if (tab.dataset.view === "learn") renderLearnShell();
     });
   });
 
@@ -279,7 +286,8 @@ function bindEvents() {
       state.settings.learnMode = button.dataset.learnMode;
       saveState();
       syncLearnModeButtons();
-      nextLearnQuestion();
+      if (state.learn.isActive) nextLearnQuestion();
+      else renderLearnStats();
     });
   });
 
@@ -288,14 +296,16 @@ function bindEvents() {
       state.settings.answerSide = button.dataset.answerSide;
       saveState();
       syncAnswerSideButtons();
-      nextLearnQuestion();
+      if (state.learn.isActive) nextLearnQuestion();
+      else renderLearnStats();
     });
   });
 
   els.hardOnlyToggle.addEventListener("change", (event) => {
     state.settings.hardOnly = event.target.checked;
     saveState();
-    nextLearnQuestion();
+    if (state.learn.isActive) nextLearnQuestion();
+    else renderLearnStats();
   });
 
   els.sessionSizeInput.addEventListener("change", (event) => {
@@ -313,6 +323,7 @@ function bindEvents() {
   els.writtenForm.addEventListener("submit", handleWrittenSubmit);
   els.overrideIncorrectBtn.addEventListener("click", () => overrideLastAnswer(false));
   els.overrideCorrectBtn.addEventListener("click", () => overrideLastAnswer(true));
+  els.backToLearnSetupBtn.addEventListener("click", returnToLearnSetup);
   els.skipLearnBtn.addEventListener("click", nextLearnQuestion);
   els.nextQuestionBtn.addEventListener("click", nextLearnQuestion);
 
@@ -341,9 +352,9 @@ function handleFileImport(event) {
       state.currentIndex = 0;
       state.isFlipped = false;
       state.learn.currentCard = null;
+      state.learn.isActive = false;
       saveState();
       refreshAll();
-      nextLearnQuestion();
     } catch (error) {
       alert(error.message || "Could not import that CSV.");
     } finally {
@@ -443,6 +454,7 @@ function refreshAll() {
   renderLibrary();
   renderDashboard();
   renderLearnStats();
+  renderLearnShell();
 }
 
 function populateTierFilter() {
@@ -651,11 +663,26 @@ function markCardMastery(cardId, mastery, countReview) {
 }
 
 function nextLearnQuestion() {
+  state.learn.isActive = true;
+  renderLearnShell();
   const card = selectLearnCard();
   state.learn.currentCard = card;
   state.learn.answered = false;
   state.learn.options = card ? buildChoices(card) : [];
   renderLearnQuestion();
+}
+
+function returnToLearnSetup() {
+  state.learn.isActive = false;
+  clearFeedback();
+  renderLearnShell();
+  renderLearnStats();
+}
+
+function renderLearnShell() {
+  els.learnSetup.hidden = state.learn.isActive;
+  els.learnStage.hidden = !state.learn.isActive;
+  document.querySelector("#learn").classList.toggle("is-testing", state.learn.isActive);
 }
 
 function selectLearnCard() {
@@ -1123,9 +1150,13 @@ function renderLearnStats() {
   const percent = Math.min(100, Math.round((today / goal) * 100));
   const sessionIds = new Set(state.settings.sessionIds || []);
   const due = getLearnPool().filter(isDue).length;
+  const hard = state.deck.filter(isHardCard).length;
   els.todayGoalLabel.textContent = `${today} / ${goal}`;
   els.todayGoalBar.style.width = `${percent}%`;
   els.learnDueCount.textContent = `${due} due`;
+  els.learnDeckCount.textContent = state.deck.length;
+  els.learnDueSetupCount.textContent = due;
+  els.learnHardSetupCount.textContent = hard;
   els.sessionCountLabel.textContent = sessionIds.size ? `${sessionIds.size} selected` : "All cards";
 }
 
@@ -1170,12 +1201,14 @@ function startLimitedSession() {
   const sorted = shuffle([...pool].sort((a, b) => getPriorityScore(b) - getPriorityScore(a)));
   const picked = sorted.slice(0, Math.min(state.settings.sessionSize, sorted.length));
   state.settings.sessionIds = picked.map((card) => card.id);
+  state.learn.currentCard = null;
   saveState();
   nextLearnQuestion();
 }
 
 function clearLimitedSession() {
   state.settings.sessionIds = [];
+  state.learn.currentCard = null;
   saveState();
   nextLearnQuestion();
 }
@@ -1200,9 +1233,9 @@ function setView(viewId) {
 function clearProgress() {
   if (!confirm("Reset all saved study progress, streaks, and spaced repetition data?")) return;
   state.progress = {};
+  state.learn.isActive = false;
   saveState();
   refreshAll();
-  nextLearnQuestion();
 }
 
 function exportProgress() {

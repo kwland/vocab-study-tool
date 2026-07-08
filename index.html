@@ -151,94 +151,111 @@
           </div>
         </section>
 
-        <section class="view learn-view" id="learn" aria-labelledby="learn-title">
-          <div class="learn-layout">
-            <aside class="learn-panel" aria-label="Learn settings">
-              <div class="panel-section">
-                <p class="eyebrow">Adaptive practice</p>
-                <h2>Learn mode</h2>
-                <p class="panel-copy">Questions favor weak and due words, so missed terms come back sooner.</p>
-              </div>
-
-              <div class="panel-section">
-                <span class="field-label">Question type</span>
-                <div class="segmented-control" role="group" aria-label="Question type">
-                  <button class="segment is-active" type="button" data-learn-mode="written">Written</button>
-                  <button class="segment" type="button" data-learn-mode="multiple">Multiple</button>
-                  <button class="segment" type="button" data-learn-mode="sat">SAT blank</button>
-                </div>
-              </div>
-
-              <div class="panel-section">
-                <span class="field-label">Answer side</span>
-                <div class="segmented-control two-up" role="group" aria-label="Answer side">
-                  <button class="segment is-active" type="button" data-answer-side="term">Term</button>
-                  <button class="segment" type="button" data-answer-side="definition">Definition</button>
-                </div>
-              </div>
-
-              <label class="toggle-row">
-                <input id="hardOnlyToggle" type="checkbox">
-                <span>
-                  <strong>Hard words only</strong>
-                  <small>Missed, weak, or due soon</small>
-                </span>
-              </label>
-
-              <div class="panel-section">
-                <div class="section-label-row">
-                  <label class="field-label" for="sessionSizeInput">Cards this session</label>
-                  <span id="sessionCountLabel">All cards</span>
-                </div>
-                <div class="goal-stepper">
-                  <button type="button" id="sessionDownBtn" aria-label="Lower session size">-</button>
-                  <input id="sessionSizeInput" type="number" min="1" max="200" step="1">
-                  <button type="button" id="sessionUpBtn" aria-label="Raise session size">+</button>
-                </div>
-                <div class="button-row">
-                  <button class="secondary-button" type="button" id="startSessionBtn">Sample set</button>
-                  <button class="secondary-button" type="button" id="clearSessionBtn">All cards</button>
-                </div>
-              </div>
-
-              <div class="panel-section">
-                <label class="field-label" for="dailyGoalInput">Daily goal</label>
-                <div class="goal-stepper">
-                  <button type="button" id="goalDownBtn" aria-label="Lower daily goal">-</button>
-                  <input id="dailyGoalInput" type="number" min="1" max="200" step="1">
-                  <button type="button" id="goalUpBtn" aria-label="Raise daily goal">+</button>
-                </div>
-              </div>
-
-              <div class="learn-meter">
+        <section class="view learn-view" id="learn" aria-label="Learn">
+          <div class="learn-shell">
+            <section class="learn-setup" id="learnSetup">
+              <div class="setup-header">
                 <div>
-                  <span>Learned today</span>
-                  <strong id="todayGoalLabel">0 / 20</strong>
+                  <p class="eyebrow">Learn</p>
+                  <h1 id="learn-title">Set up practice</h1>
                 </div>
-                <div class="meter-track">
-                  <span id="todayGoalBar"></span>
+                <div class="setup-summary" aria-label="Learn summary">
+                  <span><strong id="learnDeckCount">0</strong> words</span>
+                  <span><strong id="learnDueSetupCount">0</strong> due</span>
+                  <span><strong id="learnHardSetupCount">0</strong> hard</span>
                 </div>
               </div>
 
-              <div class="confusing-panel">
-                <span class="field-label">Confusing pair</span>
-                <p id="confusingPairText">Practice will flag common look-alikes when they appear.</p>
-              </div>
-            </aside>
+              <div class="learn-settings-grid" aria-label="Learn settings">
+                <section class="settings-panel">
+                  <div class="panel-section">
+                    <span class="field-label">Question type</span>
+                    <div class="segmented-control" role="group" aria-label="Question type">
+                      <button class="segment is-active" type="button" data-learn-mode="written">Written</button>
+                      <button class="segment" type="button" data-learn-mode="multiple">Multiple</button>
+                      <button class="segment" type="button" data-learn-mode="sat">SAT blank</button>
+                    </div>
+                  </div>
 
-            <section class="learn-stage" aria-live="polite">
+                  <div class="panel-section">
+                    <span class="field-label">Answer side</span>
+                    <div class="segmented-control two-up" role="group" aria-label="Answer side">
+                      <button class="segment is-active" type="button" data-answer-side="term">Term</button>
+                      <button class="segment" type="button" data-answer-side="definition">Definition</button>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="settings-panel">
+                  <label class="toggle-row">
+                    <input id="hardOnlyToggle" type="checkbox">
+                    <span>
+                      <strong>Hard words only</strong>
+                      <small>Missed, weak, or due soon</small>
+                    </span>
+                  </label>
+
+                  <div class="panel-section">
+                    <div class="section-label-row">
+                      <label class="field-label" for="sessionSizeInput">Cards this session</label>
+                      <span id="sessionCountLabel">All cards</span>
+                    </div>
+                    <div class="goal-stepper">
+                      <button type="button" id="sessionDownBtn" aria-label="Lower session size">-</button>
+                      <input id="sessionSizeInput" type="number" min="1" max="200" step="1">
+                      <button type="button" id="sessionUpBtn" aria-label="Raise session size">+</button>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="settings-panel">
+                  <div class="panel-section">
+                    <label class="field-label" for="dailyGoalInput">Daily goal</label>
+                    <div class="goal-stepper">
+                      <button type="button" id="goalDownBtn" aria-label="Lower daily goal">-</button>
+                      <input id="dailyGoalInput" type="number" min="1" max="200" step="1">
+                      <button type="button" id="goalUpBtn" aria-label="Raise daily goal">+</button>
+                    </div>
+                  </div>
+
+                  <div class="learn-meter">
+                    <div>
+                      <span>Learned today</span>
+                      <strong id="todayGoalLabel">0 / 20</strong>
+                    </div>
+                    <div class="meter-track">
+                      <span id="todayGoalBar"></span>
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              <div class="setup-actions">
+                <button class="primary-button" type="button" id="startSessionBtn">Start practice</button>
+                <button class="secondary-button" type="button" id="clearSessionBtn">Practice all cards</button>
+              </div>
+            </section>
+
+            <section class="learn-stage" id="learnStage" aria-live="polite" hidden>
               <div class="stage-header">
                 <div>
                   <p class="eyebrow" id="learnMeta">Ready</p>
-                  <h1 id="learn-title">Learn Vocabulary</h1>
+                  <h1>Learn Vocabulary</h1>
                 </div>
-                <div class="card-count" id="learnDueCount">0 due</div>
+                <div class="stage-actions">
+                  <div class="card-count" id="learnDueCount">0 due</div>
+                  <button class="secondary-button" type="button" id="backToLearnSetupBtn">Settings</button>
+                </div>
               </div>
 
               <article class="question-card">
                 <p class="face-label" id="questionTypeLabel">Written answer</p>
                 <h2 id="questionPrompt">Type the word that matches the definition.</h2>
                 <p class="question-subtext" id="questionClue">Import words or use the sample deck to begin.</p>
+                <div class="confusing-panel question-note">
+                  <span class="field-label">Confusing pair</span>
+                  <p id="confusingPairText">Practice will flag common look-alikes when they appear.</p>
+                </div>
 
                 <form class="written-answer" id="writtenForm">
                   <label class="field-label" for="writtenAnswer">Your answer</label>

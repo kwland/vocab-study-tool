@@ -22,6 +22,7 @@ The importer also accepts `word` instead of `term`, `meaning` instead of `defini
 - Browser-saved progress
 - Saved dark/light theme toggle
 - Learn mode with written answers, difficult multiple choice, and SAT-style blanks
+- Learn setup screen that hides settings during active practice
 - Switch Learn mode between answering with terms or definitions
 - Sample a smaller set of cards for a focused Learn session
 - Override a graded answer as correct or incorrect
